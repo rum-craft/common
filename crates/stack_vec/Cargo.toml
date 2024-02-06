@@ -1,0 +1,10 @@
+[package]
+name = "rum_stack_vec"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies.rum_hash]
+path = "../hash"

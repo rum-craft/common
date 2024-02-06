@@ -1,0 +1,35 @@
+use_small_heuristics = "Max"
+
+# Line Widths
+max_width = 130
+
+enum_discrim_align_threshold = 20
+struct_field_align_threshold = 20
+newline_style = "Unix"
+tab_spaces = 2
+
+hide_parse_errors = true
+
+binop_separator = "Front"
+
+blank_lines_lower_bound = 0
+blank_lines_upper_bound = 1
+
+# Comments
+#format_code_in_doc_comments = true
+wrap_comments = true
+normalize_comments = false
+
+condense_wildcard_suffixes = true
+hex_literal_case = "Upper"
+merge_derives = true
+
+imports_granularity = "Crate"
+
+imports_layout = "HorizontalVertical"
+
+overflow_delimited_expr = true
+
+reorder_impl_items = true
+
+struct_lit_width = 70

@@ -1,0 +1,23 @@
+[workspace]
+
+members = [
+    "./crates/istring",
+    "./crates/hash",
+    "./crates/buffer",
+    "./crates/stack_vec",
+    "./crates/allocators",
+    "./crates/profile"
+]
+
+exclude = [
+  "test"
+]
+
+resolver = "2"
+
+[profile.dev]
+debug = 2
+
+[profile.release]
+opt-level=3
+debug = 0
