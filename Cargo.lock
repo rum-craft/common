@@ -23,6 +23,7 @@ version = "0.0.0"
 dependencies = [
  "num-traits",
  "rum_profile",
+ "rum_stack",
 ]
 
 [[package]]
@@ -45,7 +46,7 @@ name = "rum_profile"
 version = "0.0.0"
 
 [[package]]
-name = "rum_stack_vec"
+name = "rum_stack"
 version = "0.0.0"
 dependencies = [
  "rum_hash",

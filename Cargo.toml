@@ -4,8 +4,8 @@ members = [
     "./crates/istring",
     "./crates/hash",
     "./crates/buffer",
-    "./crates/stack_vec",
-    "./crates/allocators",
+    "./crates/stack",
+    "./crates/allocator",
     "./crates/profile"
 ]
 

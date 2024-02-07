@@ -11,3 +11,6 @@ version = "0.2.17"
 
 [dependencies.rum_profile]
 path = "../profile"
+
+[dependencies.rum_stack]
+path = "../stack"

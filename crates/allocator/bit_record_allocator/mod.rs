@@ -7,5 +7,5 @@ mod block_record;
 #[cfg(test)]
 mod test;
 
-pub use allocator::{BlockRecordAllocator as AllocatorBase, RcBlockAllocator as Allocator};
+pub use allocator::RcBlockAllocator as BlockRecordAllocator;
 pub use bit_block_bit_type::BlockBits;

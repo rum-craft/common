@@ -1,5 +1,5 @@
 [package]
-name = "rum_stack_vec"
+name = "rum_stack"
 version = "0.0.0"
 edition = "2021"
 

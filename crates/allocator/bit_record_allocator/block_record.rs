@@ -27,9 +27,10 @@ pub(crate) struct BlockRecord<BitType: BlockBits> {
 
 impl<BitType: BlockBits> Debug for BlockRecord<BitType> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("BB<{}>", BitType::name()))?;
+    //f.write_fmt(format_args!("Rec<{}>", BitType::name()))?;
 
-    f.write_str(" [ ")?;
+    //  f.write_str(" [ ")?;
+    f.write_str(" ")?;
 
     for (ty, index) in self.iter_blocks() {
       if index > 0 && (index % 4) == 0 {
@@ -42,8 +43,9 @@ impl<BitType: BlockBits> Debug for BlockRecord<BitType> {
         Sub => f.write_str("S")?,
       }
     }
+    f.write_str(" ")?;
 
-    f.write_str(" ] ")?;
+    //   f.write_str(" ] ")?;
 
     Ok(())
   }

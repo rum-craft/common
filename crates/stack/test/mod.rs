@@ -1,4 +1,4 @@
-use crate::StackVec;
+use crate::stack_vec::StackVec;
 
 #[test]
 pub fn allocates_on_stack_only() {
