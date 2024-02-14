@@ -60,7 +60,11 @@ impl<BitType: BlockBits> Iterator for BlockIter<BitType> {
   type Item = (BitState, usize);
 
   fn next(&mut self) -> Option<Self::Item> {
-    let val = if self.index < BitType::bit_count() { Some((self.header.get_nibble(self.index), self.index)) } else { None };
+    let val = if self.index < BitType::bit_count() {
+      Some((self.header.get_nibble(self.index), self.index))
+    } else {
+      None
+    };
 
     self.index += 1;
 
@@ -79,23 +83,34 @@ pub struct RcBlockAllocator<
   BitType: BlockBits,
   A: Allocator = Global,
   const MANAGER_ALLOCATOR: bool = false,
->(pub(crate) *mut BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, MANAGER_ALLOCATOR>, PhantomData<A>);
+>(
+  pub(crate) *mut BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, MANAGER_ALLOCATOR>,
+  PhantomData<A>,
+);
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, false> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits>
+  RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, false>
+{
   #[inline(always)]
-  pub fn new(size: usize) -> Result<RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, false>, std::alloc::AllocError> {
+  pub fn new(
+    size: usize,
+  ) -> Result<RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, false>, std::alloc::AllocError> {
     BlockRecordAllocator::new(size, Global)
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator> RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, false> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator>
+  RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, false>
+{
   #[inline(always)]
   pub fn from_allocator(size: usize, allocator: A) -> Result<Self, std::alloc::AllocError> {
     BlockRecordAllocator::new(size, allocator)
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, true> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits>
+  RcBlockAllocator<BASE_ALLOC_SIZE, BitType, Global, true>
+{
   #[inline(always)]
   pub fn new_managed(
     block_head: *mut u8,
@@ -105,8 +120,12 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> RcBlockAllocator<BASE_ALL
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator, const MANAGER_ALLOCATOR: bool>
-  RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, MANAGER_ALLOCATOR>
+impl<
+    const BASE_ALLOC_SIZE: usize,
+    BitType: BlockBits,
+    A: Allocator,
+    const MANAGER_ALLOCATOR: bool,
+  > RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, MANAGER_ALLOCATOR>
 {
   #[inline(always)]
   pub fn base_allocation_size(size: usize) -> usize {
@@ -147,10 +166,15 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator, const MANAG
 unsafe impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator> Allocator
   for RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A>
 {
-  fn allocate(&self, layout: std::alloc::Layout) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+  fn allocate(
+    &self,
+    layout: std::alloc::Layout,
+  ) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
     let size = layout.size();
     match unsafe { self.alloc(size) } {
-      Some(ptr) => Ok(unsafe { std::ptr::NonNull::<[u8]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(ptr, size)) }),
+      Some(ptr) => Ok(unsafe {
+        std::ptr::NonNull::<[u8]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(ptr, size))
+      }),
       None => Err(std::alloc::AllocError),
     }
   }
@@ -169,15 +193,21 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator, const M: bo
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator> Clone for RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator> Clone
+  for RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A>
+{
   fn clone(&self) -> Self {
     unsafe { self.0.as_mut().unwrap_unchecked().references += 1 };
     Self(self.0, self.1)
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator, const MANAGER_ALLOCATOR: bool> Drop
-  for RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, MANAGER_ALLOCATOR>
+impl<
+    const BASE_ALLOC_SIZE: usize,
+    BitType: BlockBits,
+    A: Allocator,
+    const MANAGER_ALLOCATOR: bool,
+  > Drop for RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, MANAGER_ALLOCATOR>
 {
   fn drop(&mut self) {
     unsafe {
@@ -190,7 +220,11 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator, const MANAG
   }
 }
 
-pub struct BlockRecordAllocator<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: bool = false> {
+pub struct BlockRecordAllocator<
+  const BASE_ALLOC_SIZE: usize,
+  BitType: BlockBits,
+  const MANAGER_ALLOCATOR: bool = false,
+> {
   pub(crate) records:     *mut BlockRecord<BitType>,
   pub(crate) data:        *mut u8,
   pub(crate) records_len: usize,
@@ -203,7 +237,9 @@ pub struct BlockRecordAllocator<const BASE_ALLOC_SIZE: usize, BitType: BlockBits
   split_allocation:       bool,
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, true> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits>
+  BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, true>
+{
   /// Allocates memory from an externally owned memory block.
   ///
   /// # Safety
@@ -218,21 +254,29 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> BlockRecordAllocator<BASE
   ) -> Result<RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, true>, std::alloc::AllocError> {
     match Self::create_bit_record_allocator(data_len) {
       Some((records_len, base_level, offsets, sizes)) => {
-        let Ok((alloc_struct, par_allocator, record_layout, ..)) = Self::get_layouts::<A>(records_len, data_len) else {
+        let Ok((alloc_struct, par_allocator, record_layout, ..)) =
+          Self::get_layouts::<A>(records_len, data_len)
+        else {
           return Err(std::alloc::AllocError);
         };
 
-        let root_layout = alloc_struct.extend(par_allocator).unwrap().0.extend(record_layout).unwrap().0;
+        let root_layout =
+          alloc_struct.extend(par_allocator).unwrap().0.extend(record_layout).unwrap().0;
 
         let ptr = base_allocator.allocate_zeroed(root_layout)?.as_ptr() as *mut u8;
 
         let root = unsafe { &mut *(ptr as *mut Self) };
 
-        let alloc_offset = alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
-        let records_offset = alloc_offset + par_allocator.size() + par_allocator.padding_needed_for(record_layout.align());
+        let alloc_offset =
+          alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
+        let records_offset = alloc_offset
+          + par_allocator.size()
+          + par_allocator.padding_needed_for(record_layout.align());
 
         let mut allocator = Some(base_allocator);
-        unsafe { std::mem::swap(&mut *(ptr.offset(alloc_offset as isize) as *mut _), &mut allocator) };
+        unsafe {
+          std::mem::swap(&mut *(ptr.offset(alloc_offset as isize) as *mut _), &mut allocator)
+        };
         std::mem::forget(allocator);
 
         root.records = unsafe { ptr.offset(records_offset as isize) as *mut _ };
@@ -255,7 +299,9 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> BlockRecordAllocator<BASE
   }
 }
 
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, true> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits>
+  BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, true>
+{
   /// Allocates memory from internally owned memory block.
   ///
   /// # Safety
@@ -268,23 +314,40 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits> BlockRecordAllocator<BASE
   ) -> Result<RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A>, std::alloc::AllocError> {
     match Self::create_bit_record_allocator(data_len) {
       Some((records_len, base_level, offsets, sizes)) => {
-        let Ok((alloc_struct, par_allocator, record_layout, data_layout)) = Self::get_layouts::<A>(records_len, data_len) else {
+        let Ok((alloc_struct, par_allocator, record_layout, data_layout)) =
+          Self::get_layouts::<A>(records_len, data_len)
+        else {
           return Err(std::alloc::AllocError);
         };
 
-        let root_layout =
-          alloc_struct.extend(par_allocator).unwrap().0.extend(record_layout).unwrap().0.extend(data_layout).unwrap().0;
+        let root_layout = alloc_struct
+          .extend(par_allocator)
+          .unwrap()
+          .0
+          .extend(record_layout)
+          .unwrap()
+          .0
+          .extend(data_layout)
+          .unwrap()
+          .0;
 
         let ptr = base_allocator.allocate_zeroed(root_layout)?.as_ptr() as *mut u8;
 
         let root = unsafe { &mut *(ptr as *mut Self) };
 
-        let alloc_offset = alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
-        let records_offset = alloc_offset + par_allocator.size() + par_allocator.padding_needed_for(record_layout.align());
-        let data_offset = records_offset + record_layout.size() + record_layout.padding_needed_for(data_layout.align());
+        let alloc_offset =
+          alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
+        let records_offset = alloc_offset
+          + par_allocator.size()
+          + par_allocator.padding_needed_for(record_layout.align());
+        let data_offset = records_offset
+          + record_layout.size()
+          + record_layout.padding_needed_for(data_layout.align());
 
         let mut allocator = Some(base_allocator);
-        unsafe { std::mem::swap(&mut *(ptr.offset(alloc_offset as isize) as *mut _), &mut allocator) };
+        unsafe {
+          std::mem::swap(&mut *(ptr.offset(alloc_offset as isize) as *mut _), &mut allocator)
+        };
         std::mem::forget(allocator);
 
         root.records = unsafe { ptr.offset(records_offset as isize) as *mut _ };
@@ -327,14 +390,24 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
     let base_layout = if MANAGER_ALLOCATOR {
       alloc_struct.extend(par_allocator).unwrap().0.extend(record_layout).unwrap().0
     } else {
-      alloc_struct.extend(par_allocator).unwrap().0.extend(record_layout).unwrap().0.extend(data_layout).unwrap().0
+      alloc_struct
+        .extend(par_allocator)
+        .unwrap()
+        .0
+        .extend(record_layout)
+        .unwrap()
+        .0
+        .extend(data_layout)
+        .unwrap()
+        .0
     };
 
     let ptr = (self as *const _ as *mut u8);
 
     let alloc_offset = alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
 
-    let allocator = std::mem::take(&mut *(ptr.offset(alloc_offset as isize) as *mut Option<A>)).unwrap_unchecked();
+    let allocator = std::mem::take(&mut *(ptr.offset(alloc_offset as isize) as *mut Option<A>))
+      .unwrap_unchecked();
 
     allocator.deallocate(NonNull::<u8>::new_unchecked(ptr), base_layout);
   }
@@ -343,7 +416,10 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
   pub(crate) fn get_layouts<A: Allocator>(
     records_len: usize,
     data_block_size: usize,
-  ) -> Result<(std::alloc::Layout, std::alloc::Layout, std::alloc::Layout, std::alloc::Layout), std::alloc::LayoutError> {
+  ) -> Result<
+    (std::alloc::Layout, std::alloc::Layout, std::alloc::Layout, std::alloc::Layout),
+    std::alloc::LayoutError,
+  > {
     let alloc_struct = std::alloc::Layout::new::<BlockRecordAllocator<BASE_ALLOC_SIZE, BitType>>();
     let par_allocator = std::alloc::Layout::new::<Option<A>>();
     let header_layout = std::alloc::Layout::array::<BlockRecord<BitType>>(records_len)?;
@@ -387,7 +463,12 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
 
       Some((offsets[level] as usize, level, offsets, sizes))
     } else {
-      Some((records_len, level, *BitType::block_group_offset_lut(), *BitType::block_group_size_lut()))
+      Some((
+        records_len,
+        level,
+        *BitType::block_group_offset_lut(),
+        *BitType::block_group_size_lut(),
+      ))
     }
   }
 
@@ -424,8 +505,8 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
           break;
         }
 
-        block_offset =
-          BitType::block_group_offset_lut()[depth + 1] as usize + BitType::block_group_size_lut()[depth] * inter_block_index;
+        block_offset = BitType::block_group_offset_lut()[depth + 1] as usize
+          + BitType::block_group_size_lut()[depth] * inter_block_index;
         inter_block_index = end_bit;
         block_index = block_offset + inter_block_index;
       }
@@ -487,7 +568,12 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
               }
             };
 
-            match self.allocate_inner(child_sub_field_offset + bit_index, current_level - 1, request_size, can_borrow) {
+            match self.allocate_inner(
+              child_sub_field_offset + bit_index,
+              current_level - 1,
+              request_size,
+              can_borrow,
+            ) {
               Some(AllocResult { ptr_offset, is_full_block: full_block, adjacent }) => {
                 let block = &mut self.mut_records()[block_index];
 
@@ -499,9 +585,14 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
                   Some(adjacent_is_full) => {
                     // Adjacent sub-block is in another block
 
-                    adjacent_block.set_nibble(0, adjacent_is_full.then_some(Full).unwrap_or(Partial));
+                    adjacent_block
+                      .set_nibble(0, adjacent_is_full.then_some(Full).unwrap_or(Partial));
 
-                    return Some(AllocResult { adjacent: Some(adjacent_block.is_full()), is_full_block, ptr_offset });
+                    return Some(AllocResult {
+                      adjacent: Some(adjacent_block.is_full()),
+                      is_full_block,
+                      ptr_offset,
+                    });
                   }
                   None => {
                     return Some(AllocResult { is_full_block, ptr_offset, adjacent: None });
@@ -516,7 +607,12 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
               nibble == BitState::Empty || nibble == BitState::Partial
             };
 
-            match self.allocate_inner(child_sub_field_offset + bit_index, current_level - 1, request_size, can_borrow) {
+            match self.allocate_inner(
+              child_sub_field_offset + bit_index,
+              current_level - 1,
+              request_size,
+              can_borrow,
+            ) {
               Some(AllocResult { ptr_offset, is_full_block: full_block, adjacent }) => {
                 let block = &mut self.mut_records()[block_index];
 
@@ -524,11 +620,22 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
 
                 match adjacent {
                   Some(adjacent_is_full) => {
-                    block.set_nibble(bit_index + 1, adjacent_is_full.then_some(Full).unwrap_or(Partial));
-                    return Some(AllocResult { is_full_block: block.is_full(), ptr_offset, adjacent: None });
+                    block.set_nibble(
+                      bit_index + 1,
+                      adjacent_is_full.then_some(Full).unwrap_or(Partial),
+                    );
+                    return Some(AllocResult {
+                      is_full_block: block.is_full(),
+                      ptr_offset,
+                      adjacent: None,
+                    });
                   }
                   None => {
-                    return Some(AllocResult { is_full_block: block.is_full(), ptr_offset, adjacent: None });
+                    return Some(AllocResult {
+                      is_full_block: block.is_full(),
+                      ptr_offset,
+                      adjacent: None,
+                    });
                   }
                 }
               }
@@ -578,13 +685,14 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
           fill_block::<true, _>(block, bit_index, k);
 
           if current_level > 1 {
-            let child_sub_field_offset =
-              self.offsets[current_depth + 1] as usize + (BitType::bit_count() * sub_table_block_index);
+            let child_sub_field_offset = self.offsets[current_depth + 1] as usize
+              + (BitType::bit_count() * sub_table_block_index);
 
             self.mut_records()[bit_index + child_sub_field_offset].clear();
           }
 
-          let ptr_offset = (sub_table_block_index * current_block_size) + (bit_index * current_bit_size);
+          let ptr_offset =
+            (sub_table_block_index * current_block_size) + (bit_index * current_bit_size);
 
           Some(AllocResult { is_full_block: block.is_full(), ptr_offset, adjacent: None })
         } else if can_borrow {
@@ -612,7 +720,8 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
             fill_block::<true, _>(block, our_offset, our_block_count);
             fill_block::<false, _>(other_block, their_offset, their_bit_count);
 
-            let ptr_offset = (sub_table_block_index * current_block_size) + (our_offset * current_bit_size);
+            let ptr_offset =
+              (sub_table_block_index * current_block_size) + (our_offset * current_bit_size);
 
             Some(AllocResult {
               is_full_block: block.is_full(),
@@ -631,9 +740,14 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
           if state == Empty {
             block.set_nibble(bit_index, Full);
 
-            let ptr_offset = (sub_table_block_index * current_block_size) + (bit_index * current_bit_size);
+            let ptr_offset =
+              (sub_table_block_index * current_block_size) + (bit_index * current_bit_size);
 
-            return Some(AllocResult { is_full_block: block.is_full(), ptr_offset, adjacent: None });
+            return Some(AllocResult {
+              is_full_block: block.is_full(),
+              ptr_offset,
+              adjacent: None,
+            });
           }
         }
 
@@ -728,7 +842,8 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
                 if next_bit >= BitType::bit_count() {
                   // Check the adjacent block for sub bits
                   if sub_table_block_index < (self.lengths[current_depth] - 1) {
-                    let adj_block: &mut BlockRecord<BitType> = &mut self.mut_records()[block_index + 1];
+                    let adj_block: &mut BlockRecord<BitType> =
+                      &mut self.mut_records()[block_index + 1];
 
                     next_bit = 0;
 
@@ -739,13 +854,19 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
                         // No change occurred
                         break 'return_val (block.get_super_state(), outer_adjacent_state);
                       } else {
-                        break 'return_val (block.get_super_state(), Some(adj_block.get_super_state()));
+                        break 'return_val (
+                          block.get_super_state(),
+                          Some(adj_block.get_super_state()),
+                        );
                       }
 
                       next_bit += 1;
 
                       if next_bit >= BitType::bit_count() {
-                        break 'return_val (block.get_super_state(), Some(adj_block.get_super_state()));
+                        break 'return_val (
+                          block.get_super_state(),
+                          Some(adj_block.get_super_state()),
+                        );
                       }
                     }
                   } else {
@@ -829,7 +950,9 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
 }
 
 // Debug Implementation
-impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const B: bool> BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, B> {
+impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const B: bool>
+  BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, B>
+{
   pub(super) fn get_data<'this>(&'this self) -> &'this [u8] {
     unsafe { std::slice::from_raw_parts(self.data, self.data_len) }
   }
@@ -839,11 +962,21 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const B: bool> Debug
   for BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, B>
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("\nBlockHeaderRoot<{},{}> ----------------", BASE_ALLOC_SIZE, BitType::name()))?;
+    f.write_fmt(format_args!(
+      "\nBlockHeaderRoot<{},{}> ----------------",
+      BASE_ALLOC_SIZE,
+      BitType::name()
+    ))?;
 
     f.write_fmt(format_args!("\nrecords len (recs): {}", self.records_len))?;
-    f.write_fmt(format_args!("\n   record size (b): {}", std::mem::size_of::<BlockRecord<BitType>>()))?;
-    f.write_fmt(format_args!("\n  records size (b): {}", self.records_len * std::mem::size_of::<BlockRecord<BitType>>()))?;
+    f.write_fmt(format_args!(
+      "\n   record size (b): {}",
+      std::mem::size_of::<BlockRecord<BitType>>()
+    ))?;
+    f.write_fmt(format_args!(
+      "\n  records size (b): {}",
+      self.records_len * std::mem::size_of::<BlockRecord<BitType>>()
+    ))?;
     f.write_fmt(format_args!("\n      data len (b): {}", self.data_len))?;
     f.write_fmt(format_args!("\n     base size (b): {}", self.block_size))?;
     f.write_fmt(format_args!("\n        base level: {}", self.base_level))?;
@@ -922,7 +1055,11 @@ pub(crate) fn find_range_offset<BitType: BlockBits>(len: usize, mut free_bits: B
 }
 
 #[inline(always)]
-pub(crate) fn select_child_field<BitType: BlockBits>(current_depth: usize, in_field_block_index: usize) -> usize {
+pub(crate) fn select_child_field<BitType: BlockBits>(
+  current_depth: usize,
+  in_field_block_index: usize,
+) -> usize {
   let child_depth = current_depth + 1;
-  BitType::block_group_offset_lut()[child_depth] as usize + (BitType::block_group_size_lut()[child_depth] * in_field_block_index)
+  BitType::block_group_offset_lut()[child_depth] as usize
+    + (BitType::block_group_size_lut()[child_depth] * in_field_block_index)
 }

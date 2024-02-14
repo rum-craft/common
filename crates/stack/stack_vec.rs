@@ -148,7 +148,9 @@ impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
   #[inline(always)]
   pub fn as_slice(&self) -> &[T] {
     match &self.inner {
-      StackData::StackData(data) => unsafe { core::slice::from_raw_parts(data.as_ptr(), self.allocations) },
+      StackData::StackData(data) => unsafe {
+        core::slice::from_raw_parts(data.as_ptr(), self.allocations)
+      },
       StackData::VecData(vec) => vec.as_slice(),
       StackData::None => unsafe { core::slice::from_raw_parts(core::ptr::null(), 0) },
     }
@@ -157,7 +159,9 @@ impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
   #[inline(always)]
   pub fn as_mut_slice(&mut self) -> &mut [T] {
     match &mut self.inner {
-      StackData::StackData(data) => unsafe { core::slice::from_raw_parts_mut(data.as_mut_ptr(), self.allocations) },
+      StackData::StackData(data) => unsafe {
+        core::slice::from_raw_parts_mut(data.as_mut_ptr(), self.allocations)
+      },
       StackData::VecData(vec) => vec.as_mut_slice(),
       StackData::None => unsafe { core::slice::from_raw_parts_mut(core::ptr::null_mut(), 0) },
     }

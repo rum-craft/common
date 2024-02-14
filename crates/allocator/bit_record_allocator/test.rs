@@ -772,6 +772,8 @@ pub fn fuzz_test_random_allocations() {
   let mut rn = random_state.build_hasher().finish();
 
   let mut i = 0;
+
+  let r = NSReporter::new("alloc");
   loop {
     let old = rn;
     let val = 1024 * (rn & 0xFF0);
@@ -791,21 +793,26 @@ pub fn fuzz_test_random_allocations() {
       break;
     }
   }
+  r.report();
 
   if false {
     for (ptr, val) in &allocations {
       println!(r###"({val}, allocator.alloc({val}).expect("Pointer should be valid")),"###);
     }
   }
-  dbg!(&allocator);
+  //dbg!(&allocator);
 
+  println!("len: {}", allocations.len());
+
+  let r = NSReporter::new("free");
   for (ptr, val) in allocations {
     allocator.free(ptr).expect("Should free");
   }
+  r.report();
 
   let records_after_free = unsafe { allocator.0.as_ref().unwrap().record_snapshot() };
 
   assert_eq!(records_before_allocation, records_after_free);
 
-  dbg!(&allocator);
+  //dbg!(&allocator);
 }
