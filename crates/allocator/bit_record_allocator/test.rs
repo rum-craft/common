@@ -1,5 +1,9 @@
-use std::hash::{BuildHasher, Hasher};
+use std::{
+  alloc::Layout,
+  hash::{BuildHasher, Hasher},
+};
 
+use rum_container::StackVec;
 use rum_profile::NSReporter;
 
 use super::{block_record::BlockRecord, BlockRecordAllocator};
@@ -92,7 +96,8 @@ pub fn basic_allocations() {
     *last = 'd' as u8;
 
     let allocatted_string =
-      String::from_utf8(std::slice::from_raw_parts(data.data(), ("hello world".len())).to_vec()).expect("should be utf8 (ASCII)");
+      String::from_utf8(std::slice::from_raw_parts(data.data(), ("hello world".len())).to_vec())
+        .expect("should be utf8 (ASCII)");
 
     debug_assert_eq!(allocatted_string, "hello world");
 
@@ -165,7 +170,7 @@ pub fn massive_allocation_1GB() {
   allocator.free(ptr).expect("Should free ptr");
 
   for _ in 0..10000 {
-    let mut vec = rum_stack::StackVec::<2, _>::new();
+    let mut vec = StackVec::<2, _>::new();
     vec.push(allocator.alloc(_1GB >> 1).expect("Should allocate"));
     vec.push(allocator.alloc(_1GB >> 1).expect("Should allocate"));
 
@@ -178,7 +183,7 @@ pub fn massive_allocation_1GB() {
     assert!(allocator.is_empty());
   }
 
-  let mut vec = rum_stack::StackVec::<2, _>::new();
+  let mut vec = StackVec::<2, _>::new();
   let r = NSReporter::new("alloc");
   vec.push(allocator.alloc(_1GB >> 1).expect("Should allocate"));
   vec.push(allocator.alloc(_1GB >> 1).expect("Should allocate"));
@@ -225,7 +230,9 @@ pub fn multi_block_allocations() {
 
 #[test]
 pub fn large_allocation_followed_by_small_allocation() {
-  let allocator = BlockRecordAllocator::<128, u32, _, true>::new_managed(std::ptr::null_mut(), 8388608).expect("Should be fine!");
+  let allocator =
+    BlockRecordAllocator::<128, u32, _, true>::new_managed(std::ptr::null_mut(), 8388608)
+      .expect("Should be fine!");
 
   let ptr = allocator.alloc(4194304).expect("Should have space");
 
@@ -242,7 +249,9 @@ pub fn large_allocation_followed_by_small_allocation() {
 #[test]
 pub fn tesdst() {
   let r = NSReporter::new("create");
-  let allocator = BlockRecordAllocator::<4096, u32, _, true>::new_managed(std::ptr::null_mut(), _1GB).expect("Should be fine!");
+  let allocator =
+    BlockRecordAllocator::<4096, u32, _, true>::new_managed(std::ptr::null_mut(), _1GB)
+      .expect("Should be fine!");
 
   let allocations = vec![
     (557056, allocator.alloc(557056).expect("Pointer should be valid")),
@@ -815,4 +824,13 @@ pub fn fuzz_test_random_allocations() {
   assert_eq!(records_before_allocation, records_after_free);
 
   //dbg!(&allocator);
+}
+
+#[test]
+fn unaligned_creation() {
+  let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(208896, 64).unwrap()) };
+  let allocator =
+    BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 208896 as usize).unwrap();
+
+  dbg!(allocator);
 }

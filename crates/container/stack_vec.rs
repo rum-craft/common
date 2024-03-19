@@ -79,6 +79,24 @@ impl<const STACK_SIZE: usize, T> Drop for StackVec<STACK_SIZE, T> {
 }
 
 impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
+  /// Converts the stack vec into a regular vector, consuming the stack vec in
+  /// the process.
+  pub fn to_vec(mut self) -> Vec<T> {
+    match core::mem::take(&mut self.inner) {
+      StackData::None => vec![],
+      StackData::StackData(data) => {
+        let mut vec = Vec::<T>::with_capacity(STACK_SIZE << 1);
+        unsafe {
+          core::ptr::copy(data.as_ptr(), vec.as_mut_ptr(), self.allocations);
+          vec.set_len(self.allocations);
+        };
+        core::mem::forget(data);
+        vec
+      }
+      StackData::VecData(vec) => vec,
+    }
+  }
+
   #[inline(always)]
   pub fn new() -> Self {
     Self {
@@ -141,7 +159,7 @@ impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
   }
 
   #[inline(always)]
-  pub fn data_is_on_stack(&mut self) -> bool {
+  pub fn data_is_on_stack(&self) -> bool {
     !matches!(self.inner, StackData::VecData(..))
   }
 

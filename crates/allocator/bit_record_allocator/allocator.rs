@@ -445,18 +445,19 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
 
     let block_size: usize = Self::get_block_size_at_level(level - 1);
 
-    let end_bit = size / block_size;
+    let end_bit = (size as f64 / block_size as f64).ceil() as usize;
 
     if end_bit < BitType::bit_count() {
-      let partial = (size % block_size) > 0;
-      let diff = BitType::bit_count() - (end_bit - partial as usize);
+      let diff = BitType::bit_count() - end_bit;
 
       let mut sizes = *BitType::block_group_size_lut();
       let mut offsets = *BitType::block_group_offset_lut();
 
       let mut off = 1;
       for i in 1..8 {
-        sizes[i] = sizes[i] - (diff << BitType::power_shift_lut()[i - 1]);
+        let lut = BitType::power_shift_lut();
+        let coverage = (diff << lut[i - 1]);
+        sizes[i] = sizes[i] - coverage;
         offsets[i] = off;
         off += sizes[i] as u32;
       }

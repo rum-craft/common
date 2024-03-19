@@ -4,9 +4,12 @@ members = [
     "./crates/istring",
     "./crates/hash",
     "./crates/buffer",
-    "./crates/stack",
     "./crates/allocator",
-    "./crates/profile"
+    "./crates/profile",
+    "./crates/concurrent",
+    "./crates/container",
+    "./crates/math",
+    "./crates/log"
 ]
 
 exclude = [

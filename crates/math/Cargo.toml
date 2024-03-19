@@ -1,10 +1,10 @@
 [package]
-name = "rum_stack"
+name = "rum_math"
 version = "0.0.0"
 edition = "2021"
 
 [lib]
 path = "./lib.rs"
 
-[dependencies.rum_hash]
-path = "../hash"
+[dependencies]
+num-traits        = "0.2.17"
