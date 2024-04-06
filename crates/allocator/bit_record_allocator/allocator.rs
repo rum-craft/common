@@ -506,8 +506,7 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
           break;
         }
 
-        block_offset = BitType::block_group_offset_lut()[depth + 1] as usize
-          + BitType::block_group_size_lut()[depth] * inter_block_index;
+        block_offset = allocator.offsets[depth + 1] as usize + BASE_ALLOC_SIZE * inter_block_index;
         inter_block_index = end_bit;
         block_index = block_offset + inter_block_index;
       }
@@ -971,8 +970,9 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const B: bool> Debug
 
     f.write_fmt(format_args!("\nrecords len (recs): {}", self.records_len))?;
     f.write_fmt(format_args!(
-      "\n   record size (b): {}",
-      std::mem::size_of::<BlockRecord<BitType>>()
+      "\n   record size (b) {}: {}",
+      BitType::name(),
+      std::mem::size_of::<BlockRecord<BitType>>(),
     ))?;
     f.write_fmt(format_args!(
       "\n  records size (b): {}",

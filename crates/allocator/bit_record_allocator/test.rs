@@ -827,10 +827,23 @@ pub fn fuzz_test_random_allocations() {
 }
 
 #[test]
-fn unaligned_creation() {
+fn large_non_power_of_2_allocations() {
   let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(208896, 64).unwrap()) };
   let allocator =
     BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 208896 as usize).unwrap();
+
+  let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(41763456, 64).unwrap()) };
+  let allocator =
+    BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 41763456 as usize).unwrap();
+}
+
+#[test]
+fn large_non_power_of_2_allocation() {
+  let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(41763456, 64).unwrap()) };
+  let allocator =
+    BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 41763456 as usize).unwrap();
+
+  allocator.free(allocator.alloc(41000000 - 4194304).unwrap());
 
   dbg!(allocator);
 }
