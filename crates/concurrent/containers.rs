@@ -115,6 +115,7 @@ impl LLQueueAtomic {
   }
 }
 
+/// Multi-threaded Linked-List FIFO  Queue
 #[derive(Debug)]
 pub struct MTLLFIFOQueue16<Node: MTLLNode16> {
   pub(crate) list:  *mut LLQueueAtomic,

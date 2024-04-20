@@ -4,7 +4,7 @@ use std::{
   time::Duration,
 };
 
-use crate::{error::RumResult, ThreadId};
+use crate::{error::RumResult, BroadcastIterator, ThreadId};
 
 use super::{
   containers::{create_queues, free_queue, LLQueueAtomic, MTLLFIFOQueue16, Queue},
@@ -38,17 +38,26 @@ fn create_worker<const JOB_POOL_SIZE: usize>(
   (local_jobs, local_free_queue_ptr, local_job_queue_ptr, worker)
 }
 
+struct ThreadRef<const JOB_POOL_SIZE: usize> {
+  handle:     JoinHandle<()>,
+  job_buffer: Queue<JOB_POOL_SIZE>,
+  free_box:   Box<LLQueueAtomic>,
+  job_box:    Box<LLQueueAtomic>,
+  free_queue: MTLLFIFOQueue16<Job>,
+  job_queue:  MTLLFIFOQueue16<Job>,
+}
+
 pub struct AppThreadPool<
   const JOB_POOL_SIZE: usize,
   const SPECIALTY_COUNT: usize = 0,
   const MAX_SPECIALISTS: usize = 0,
 > {
+  pub(super) num_of_threads:        usize,
   pub(super) c_signal:              Receiver<ThreadSays>,
   pub(super) job_store:             Queue<JOB_POOL_SIZE>,
   pub(super) global_free_queue_ptr: Box<LLQueueAtomic>,
   pub(super) global_job_queue_ptr:  Box<LLQueueAtomic>,
-  pub(super) threads:
-    Vec<(JoinHandle<()>, Queue<JOB_POOL_SIZE>, Box<LLQueueAtomic>, Box<LLQueueAtomic>)>,
+  pub(super) threads:               Vec<ThreadRef<JOB_POOL_SIZE>>,
   pub(super) local_thread: (Thread, Queue<JOB_POOL_SIZE>, Box<LLQueueAtomic>, Box<LLQueueAtomic>),
   pub(super) threads_started:       usize,
   pub(super) specialty_lut:         Box<dyn SpecializationTable>,
@@ -57,6 +66,21 @@ pub struct AppThreadPool<
 impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIALISTS: usize>
   ThreadHost for AppThreadPool<JOB_POOL_SIZE, SPECIALTY_COUNT, MAX_SPECIALISTS>
 {
+  fn broadcast_message<'a>(&'a self) -> BroadcastIterator<'a> {
+    BroadcastIterator {
+      threads: self
+        .threads
+        .iter()
+        .map(|ThreadRef { free_queue, job_queue, .. }| (free_queue, job_queue))
+        .collect(),
+      index:   0,
+    }
+  }
+
+  fn num_of_threads(&self) -> usize {
+    self.num_of_threads
+  }
+
   fn __add_global_task_base(&self, task: Task, fence: bool) -> Option<Fence> {
     self.local_thread.0.__add_global_task_base(task, fence)
   }
@@ -158,7 +182,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
     let workers = (0..size)
       .into_iter()
       .map(|id| {
-        let (local_jobs, local_free_queue, local_jobs_queue, mut worker) = create_worker(
+        let (job_buffer, mut free_ptr, mut job_ptr, mut worker) = create_worker(
           global_free_queue.clone(),
           global_job_queue.clone(),
           c_sender.clone(),
@@ -166,14 +190,25 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
           id,
         );
 
-        let thread = std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
           .name(format!("rum_thread_{}", id))
           .stack_size(10 * 1024 * 1024)
           .spawn(move || {
             worker.run();
           })
           .unwrap();
-        (thread, local_jobs, local_free_queue, local_jobs_queue)
+
+        let free_queue = MTLLFIFOQueue16::new(free_ptr.as_mut(), job_buffer as *mut Job, "");
+        let job_queue = MTLLFIFOQueue16::new(job_ptr.as_mut(), job_buffer as *mut Job, "");
+
+        ThreadRef {
+          handle,
+          job_buffer,
+          free_box: free_ptr,
+          job_box: job_ptr,
+          free_queue,
+          job_queue,
+        }
       })
       .collect();
 
@@ -186,6 +221,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
     );
 
     Ok(Self {
+      num_of_threads,
       job_store: global_jobs,
       threads: workers,
       local_thread: (worker, local_jobs, local_free_queue, local_jobs_queue),
@@ -210,13 +246,18 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
   pub fn await_graceful_exit(mut self, timeout_secs: u64) {
     let time_now = std::time::Instant::now();
 
-    for (_, local_jobs, free_queue, job_queue) in self.threads.iter_mut() {
-      let local_free_queue = MTLLFIFOQueue16::new(free_queue.as_mut(), *local_jobs as *mut Job, "");
-      let local_job_queue = MTLLFIFOQueue16::new(job_queue.as_mut(), (*local_jobs) as *mut Job, "");
-
-      if let Some(job) = local_free_queue.pop_front() {
+    for ThreadRef {
+      handle,
+      job_buffer: queue,
+      free_box: free_ptr,
+      job_box: job_ptr,
+      free_queue,
+      job_queue,
+    } in self.threads.iter_mut()
+    {
+      if let Some(job) = free_queue.pop_front() {
         unsafe { (*job).task = Task::Command(ThreadDo::HaltQueued) };
-        local_job_queue.push_back(job);
+        job_queue.push_back(job);
       } else {
         panic!("No more free jobs --------------------------")
       }
@@ -263,7 +304,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
           self.threads_started += 1;
         }
         ThreadSays::Parked(thread_id) => {
-          //eprintln!("Thread {thread_id} Parked");
+          eprintln!("Thread {thread_id} Parked");
         }
         ThreadSays::Halted(thread_id) => {
           eprintln!("Thread {thread_id} Halted");
@@ -287,18 +328,13 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
       for _ in self
         .threads
         .drain(..)
-        .map(|(thread, local_jobs, mut free_queue, mut job_queue)| {
-          let local_free_queue =
-            MTLLFIFOQueue16::new(free_queue.as_mut(), local_jobs as *mut Job, "");
-          let local_job_queue =
-            MTLLFIFOQueue16::new(job_queue.as_mut(), local_jobs as *mut Job, "");
-
-          if let Some(job) = local_free_queue.pop_front() {
+        .map(|ThreadRef { handle, job_buffer, free_box, job_box, free_queue, job_queue }| {
+          if let Some(job) = free_queue.pop_front() {
             (*job).task = Task::Command(ThreadDo::Halt);
-            local_job_queue.push_back(job);
+            job_queue.push_back(job);
           }
 
-          (thread, local_jobs, free_queue, job_queue)
+          (handle, job_buffer, free_box, job_box)
         })
         .collect::<Vec<_>>()
         .into_iter()

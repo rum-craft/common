@@ -32,7 +32,61 @@ enum TaskHandlingResult {
   Continue,
 }
 
+pub struct MessageDispatcher<'a> {
+  index:      usize,
+  free_queue: &'a MTLLFIFOQueue16<Job>,
+  job_queue:  &'a MTLLFIFOQueue16<Job>,
+  retries:    usize,
+}
+
+impl<'a> MessageDispatcher<'a> {
+  pub fn dispatch<T: FnOnce(&Thread) + Send + Sync + 'static>(mut self, task: T) {
+    unsafe {
+      if let Some(job) = self.free_queue.pop_front() {
+        let j = &mut (*job);
+
+        j.task = Task::Closure(Box::new(task));
+
+        self.job_queue.push_back(job);
+
+        return;
+      } else if self.retries > 3 {
+        panic!("Out of free jobs!");
+      }
+      self.retries += 1;
+      self.dispatch(task)
+    }
+  }
+
+  pub fn index(&self) -> usize {
+    self.index
+  }
+}
+
+pub struct BroadcastIterator<'a> {
+  pub(super) threads: Vec<(&'a MTLLFIFOQueue16<Job>, &'a MTLLFIFOQueue16<Job>)>,
+  pub(super) index:   usize,
+}
+
+impl<'a> Iterator for BroadcastIterator<'a> {
+  type Item = MessageDispatcher<'a>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.index >= self.threads.len() {
+      None
+    } else {
+      let (free_queue, job_queue) = self.threads[self.index];
+      self.index += 1;
+      Some(MessageDispatcher { index: self.index - 1, free_queue, job_queue, retries: 0 })
+    }
+  }
+}
+
 pub trait ThreadHost {
+  /// Allows a unique message to be sent directly to every thread reachable by
+  /// this host
+  fn broadcast_message<'a>(&'a self) -> BroadcastIterator<'a>;
+
   fn __add_global_task_base(&self, task: Task, fence: bool) -> Option<Fence>;
 
   fn __add_specialized_task_base<Specialization: Into<usize>>(
@@ -112,6 +166,8 @@ pub trait ThreadHost {
     create_fence: bool,
     task: F,
   ) -> (Option<Fence>, Box<super::LandingZone<Data>>);
+
+  fn num_of_threads(&self) -> usize;
 }
 
 /// Communications from the main thread, or another worker thread, to a
@@ -205,6 +261,17 @@ unsafe impl Send for Thread {}
 unsafe impl Sync for Thread {}
 
 impl ThreadHost for Thread {
+  fn broadcast_message<'a>(&'a self) -> BroadcastIterator<'a> {
+    BroadcastIterator {
+      threads: vec![(&self.local_free_queue, &self.local_job_queue)],
+      index:   0,
+    }
+  }
+
+  fn num_of_threads(&self) -> usize {
+    1
+  }
+
   #[track_caller]
   fn __add_global_task_base(&self, task: Task, fence: bool) -> Option<Fence> {
     debug_assert!(task.is_active());
@@ -433,7 +500,7 @@ impl Thread {
   /// Parks this thread indefinitely. Requires the owner of the thread's
   /// JoinHandle to call `std::thread::wake` to reactivate this thread.
   fn park(&mut self) {
-    self.send_message(ThreadSays::Parked(self.id.0 as usize));
+    //self.send_message(ThreadSays::Parked(self.id.0 as usize));
     std::thread::sleep(Duration::from_nanos(500));
     // todo std::thread::park()
   }
