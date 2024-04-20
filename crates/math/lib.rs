@@ -13,3 +13,6 @@ pub use quadratic_bezier::*;
 pub use rect::*;
 pub use traits::*;
 pub use vector::*;
+
+pub type Vec2f32 = Vec2<f32>;
+pub type Vec2f64 = Vec2<f64>;
