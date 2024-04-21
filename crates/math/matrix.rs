@@ -118,12 +118,12 @@ where
 {
   pub fn top_left_ortho(width: M, height: M, near: M, far: M) -> Self {
     let _0 = M::zero();
-    Self::ortho(width, _0, height, _0, near, far)
+    Self::ortho(width, _0, -height, _0, near, far)
   }
 
   pub fn bottom_left_ortho(width: M, height: M, near: M, far: M) -> Self {
     let _0 = M::zero();
-    Self::ortho(_0, -width, height, _0, near, far)
+    Self::ortho(width, _0, _0, -height, near, far)
   }
 
   pub fn center_ortho(width: M, height: M, near: M, far: M) -> Self {
