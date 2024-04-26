@@ -175,22 +175,38 @@ impl<Data> LandingZone<Data> {
   /// Returns the the underlying data, while also removing it from the lz.
   #[track_caller]
   pub fn wait(&mut self) -> Option<Data> {
-    loop {
+    let val = loop {
       match self.__lz.load(Acquire) {
         0 => break self.data.take(),
         1 => {}
+        2 => {
+          // Landing zone has not been queued with a task
+          return None;
+        }
         lz => {
           panic!("Invalid lz state. Was this submitted as part of a task yet? {lz}")
         }
       }
       std::thread::sleep(std::time::Duration::from_nanos(500));
       std::hint::spin_loop();
+    };
+
+    // Reset the landing zone
+    match self.__lz.compare_exchange_weak(0, 2, Relaxed, Relaxed) {
+      Err(val) => {
+        panic!("Expected lz [{val}] to be 2")
+      }
+      _ => {}
     }
+
+    val
   }
 
   /// Waits for data to be set in the lz then returns that data.
   #[track_caller]
   pub fn take(&mut self) -> Data {
-    self.wait().unwrap()
+    let data = self.wait().unwrap();
+
+    data
   }
 }

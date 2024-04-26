@@ -1,3 +1,5 @@
+use crate::specialists;
+
 use super::{job::Task, AppThreadPool, Thread, ThreadHost};
 use std;
 
@@ -16,34 +18,50 @@ pub trait SpecializationTable {
   fn deregister(&mut self, thread: &mut Thread, specialty: usize) -> bool;
 }
 
-pub struct ThreadSpecializationTable<const COLUMNS: usize, const ROWS: usize> {
-  pub(crate) lut:  [[*mut Thread; COLUMNS]; ROWS],
-  pub(crate) lock: std::sync::Mutex<()>,
+pub struct ThreadSpecializationTable {
+  pub(crate) lut:                *mut *mut Thread,
+  pub(crate) lock:               std::sync::Mutex<()>,
+  specializations:               usize,
+  specialist_per_specialization: usize,
 }
 
-unsafe impl<const COLUMNS: usize, const ROWS: usize> Send
-  for ThreadSpecializationTable<COLUMNS, ROWS>
-{
-}
-unsafe impl<const COLUMNS: usize, const ROWS: usize> Sync
-  for ThreadSpecializationTable<COLUMNS, ROWS>
-{
-}
+unsafe impl Send for ThreadSpecializationTable {}
+unsafe impl Sync for ThreadSpecializationTable {}
 
-impl<const COLUMNS: usize, const ROWS: usize> ThreadSpecializationTable<COLUMNS, ROWS> {
-  pub(super) fn new() -> Self {
+impl ThreadSpecializationTable {
+  pub(super) fn new(specialist_per_specialization: usize, specializations: usize) -> Self {
+    let layout =
+      std::alloc::Layout::array::<*mut Thread>(specializations * specialist_per_specialization)
+        .expect("Could not generate specialization table");
+
+    let ptr = unsafe { std::alloc::alloc(layout) };
+
     Self {
-      lut:  [[std::ptr::null_mut(); COLUMNS]; ROWS],
+      lut: ptr as *mut _,
       lock: Default::default(),
+      specializations,
+      specialist_per_specialization,
     }
   }
 }
 
-impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
-  for ThreadSpecializationTable<COLUMNS, ROWS>
-{
+impl Drop for ThreadSpecializationTable {
+  fn drop(&mut self) {
+    let layout = std::alloc::Layout::array::<*mut Thread>(
+      self.specializations * self.specialist_per_specialization,
+    )
+    .expect("Could not generate specialization table");
+
+    unsafe { std::alloc::dealloc(self.lut as *mut _, layout) };
+  }
+}
+
+impl SpecializationTable for ThreadSpecializationTable {
   #[track_caller]
   fn get_specialist(&self, specialty: usize) -> Option<&Thread> {
+    let COLUMNS = self.specialist_per_specialization;
+    let ROWS = self.specializations;
+
     debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
 
     if COLUMNS == 0 || ROWS == 0 {
@@ -61,17 +79,19 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
       return None;
     }
 
-    let specialists = &self.lut[row];
+    let specialists =
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
 
-    if let Some(specialist) = specialists.iter().find(|i| !(**i).is_null()) {
-      return Some(unsafe { &**specialist });
-    }
+    let result =
+      specialists.iter().find_map(|i| if !i.is_null() { Some(unsafe { &**i }) } else { None });
 
-    None
+    result
   }
 
   #[track_caller]
   fn post_job(&self, task: Task, specialty: usize) -> Option<Task> {
+    let COLUMNS = self.specialist_per_specialization;
+    let ROWS = self.specializations;
     debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
 
     if COLUMNS == 0 || ROWS == 0 {
@@ -89,11 +109,7 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
       return Some(task);
     }
 
-    let specialists = &self.lut[row];
-
-    if let Some(specialist) = specialists.iter().find(|i| !(**i).is_null()) {
-      let specialist = unsafe { &mut **specialist };
-
+    if let Some(specialist) = self.get_specialist(specialty) {
       if let Some(local_job_ptr) = specialist.local_free_queue.pop_front() {
         debug_assert!(!local_job_ptr.is_null());
 
@@ -114,6 +130,8 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
 
   #[track_caller]
   fn register(&mut self, thread: &mut Thread, specialty: usize) -> bool {
+    let COLUMNS = self.specialist_per_specialization;
+    let ROWS = self.specializations;
     debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
 
     if COLUMNS == 0 || ROWS == 0 {
@@ -134,7 +152,8 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
       return false;
     }
 
-    let specialists = &mut self.lut[row];
+    let specialists =
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
 
     if let Some((index, _)) = specialists.iter().enumerate().find(|(_, i)| (**i).is_null()) {
       let column = index;
@@ -145,14 +164,8 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
         }
         Ok(_) => {
           let mut j = 0;
-
-          for i in 0..COLUMNS {
-            let specialist = specialists[i];
-            if specialist.is_null() {
-              specialists[i] = identity;
-              return true;
-            }
-          }
+          specialists[index] = identity;
+          return true;
         }
       }
     }
@@ -162,6 +175,9 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
 
   #[track_caller]
   fn deregister(&mut self, thread: &mut Thread, specialty: usize) -> bool {
+    let COLUMNS = self.specialist_per_specialization;
+    let ROWS = self.specializations;
+
     debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
 
     if COLUMNS == 0 || ROWS == 0 {
@@ -182,26 +198,23 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
       return false;
     }
 
-    let specialists = &mut self.lut[row];
+    let specialists =
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
 
     if let Some((index, _)) = specialists.iter().enumerate().find(|(_, i)| **i == identity) {
       let column = index;
 
       todo!("Implement locking for table updates!");
 
-      let new_specialists = [std::ptr::null_mut(); COLUMNS];
-
-      let mut j = 0;
-
-      for i in 0..COLUMNS {
-        let specialist = specialists[i];
-        if specialist != identity {
-          new_specialists[j] = specialist;
-          j += 1;
+      match self.lock.lock() {
+        Err(err) => {
+          eprintln!("{err}");
+        }
+        Ok(_) => {
+          let mut j = 0;
+          specialists[index] = std::ptr::null_mut();
         }
       }
-
-      *specialists = new_specialists;
 
       return true;
     } else {
@@ -217,9 +230,7 @@ impl<const COLUMNS: usize, const ROWS: usize> SpecializationTable
 pub trait Specialty: Into<usize> {}
 impl<T: Into<usize>> Specialty for T {}
 
-impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIALISTS: usize>
-  AppThreadPool<JOB_POOL_SIZE, SPECIALTY_COUNT, MAX_SPECIALISTS>
-{
+impl AppThreadPool {
   /// Assigns a specialization to a thread.
   pub fn create_specialist<T: Into<usize>>(
     &self,
@@ -339,7 +350,7 @@ mod test {
   use crate::{error::RumResult, AppThreadPool, ThreadHost};
   #[test]
   fn creates_specialists_threads() -> RumResult<()> {
-    let mut pool = AppThreadPool::<8, 5, 1>::new(4)?;
+    let mut pool = AppThreadPool::new(4, 8, 1, 5)?;
 
     pool.create_specialist(TestSpecialty::Harpist, Default::default());
     pool.create_specialist(TestSpecialty::Pianist, Default::default());

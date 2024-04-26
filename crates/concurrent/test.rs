@@ -7,9 +7,9 @@ fn allows_non_blocking_waiting_on_fence() -> crate::error::RumResult<()> {
   use std::time::Duration;
   let i = 1;
 
-  let mut pool = AppThreadPool::<1024>::new(6)?;
+  let mut pool = AppThreadPool::new(6, 1024, 0, 0)?;
 
-  let fence = pool.add_fenced_task(|thread| {
+  let fence = pool.add_fenced_task(|_| {
     println!("Finished11");
   });
 
@@ -36,10 +36,10 @@ fn allows_non_blocking_waiting_on_fence() -> crate::error::RumResult<()> {
 
 #[test]
 fn provides_return_values_through_signals_boxed() -> crate::error::RumResult<()> {
-  let mut pool: AppThreadPool<1024> = AppThreadPool::<1024>::new(2)?;
+  let mut pool = AppThreadPool::new(2, 1024, 0, 0)?;
   pool.monitor();
 
-  fn test<'a>(pool: &'a mut AppThreadPool<1024>) -> Box<LandingZone<usize>> {
+  fn test<'a>(pool: &'a mut AppThreadPool) -> Box<LandingZone<usize>> {
     //let mut d = None;
 
     let (_, signal) = pool.add_boxed_lz_task(false, |_| {
@@ -63,10 +63,10 @@ fn provides_return_values_through_signals_boxed() -> crate::error::RumResult<()>
 
 #[test]
 fn provides_return_values_through_signals_stack() -> crate::error::RumResult<()> {
-  let mut pool: AppThreadPool<1024> = AppThreadPool::<1024>::new(2)?;
+  let mut pool: AppThreadPool = AppThreadPool::new(2, 1024, 0, 0)?;
   pool.monitor();
 
-  fn test<'a>(pool: &'a mut AppThreadPool<1024>) -> LandingZone<usize> {
+  fn test<'a>(pool: &'a mut AppThreadPool) -> LandingZone<usize> {
     //let mut d = None;
     let mut signal = Default::default();
     unsafe {
@@ -95,7 +95,7 @@ fn handles_async_tasks() -> crate::error::RumResult<()> {
   use std::time::Duration;
   let i = 1;
 
-  let mut pool = AppThreadPool::<1024>::new(24)?;
+  let mut pool = AppThreadPool::new(24, 1024, 0, 0)?;
 
   async fn sleep(dur: Duration) {
     for _ in 0..dur.as_micros() {}

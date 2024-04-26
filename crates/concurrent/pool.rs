@@ -4,10 +4,10 @@ use std::{
   time::Duration,
 };
 
-use crate::{error::RumResult, BroadcastIterator, ThreadId};
+use crate::{containers::get_job_queue_ptr, error::RumResult, BroadcastIterator, ThreadId};
 
 use super::{
-  containers::{create_queues, free_queue, LLQueueAtomic, MTLLFIFOQueue16, Queue},
+  containers::{create_queues, free_queue, JobBuffer, LLQueueAtomic, MTLLFIFOQueue16},
   job::{Job, RumFuture, Task},
   specialists::{SpecializationTable, ThreadSpecializationTable},
   sync::Fence,
@@ -15,15 +15,16 @@ use super::{
   ThreadHost,
 };
 
-fn create_worker<const JOB_POOL_SIZE: usize>(
+fn create_worker(
+  job_pool_size: usize,
   global_free_queue: MTLLFIFOQueue16<Job>,
   global_job_queue: MTLLFIFOQueue16<Job>,
   thread_comm: Sender<ThreadSays>,
   specialization_lut: *mut dyn SpecializationTable,
   id: usize,
-) -> (*mut [Job; JOB_POOL_SIZE], Box<LLQueueAtomic>, Box<LLQueueAtomic>, Thread) {
+) -> (JobBuffer, Box<LLQueueAtomic>, Box<LLQueueAtomic>, Thread) {
   let (local_jobs, local_free_queue_ptr, local_job_queue_ptr, local_free_queue, local_job_queue) =
-    create_queues("Local Free", "Local Job");
+    create_queues(job_pool_size, "Local Free", "Local Job");
 
   let worker = Thread::new(
     global_free_queue,
@@ -38,34 +39,28 @@ fn create_worker<const JOB_POOL_SIZE: usize>(
   (local_jobs, local_free_queue_ptr, local_job_queue_ptr, worker)
 }
 
-struct ThreadRef<const JOB_POOL_SIZE: usize> {
+struct ThreadRef {
   handle:     JoinHandle<()>,
-  job_buffer: Queue<JOB_POOL_SIZE>,
+  job_buffer: JobBuffer,
   free_box:   Box<LLQueueAtomic>,
   job_box:    Box<LLQueueAtomic>,
   free_queue: MTLLFIFOQueue16<Job>,
   job_queue:  MTLLFIFOQueue16<Job>,
 }
 
-pub struct AppThreadPool<
-  const JOB_POOL_SIZE: usize,
-  const SPECIALTY_COUNT: usize = 0,
-  const MAX_SPECIALISTS: usize = 0,
-> {
+pub struct AppThreadPool {
   pub(super) num_of_threads:        usize,
   pub(super) c_signal:              Receiver<ThreadSays>,
-  pub(super) job_store:             Queue<JOB_POOL_SIZE>,
+  pub(super) job_store:             JobBuffer,
   pub(super) global_free_queue_ptr: Box<LLQueueAtomic>,
   pub(super) global_job_queue_ptr:  Box<LLQueueAtomic>,
-  pub(super) threads:               Vec<ThreadRef<JOB_POOL_SIZE>>,
-  pub(super) local_thread: (Thread, Queue<JOB_POOL_SIZE>, Box<LLQueueAtomic>, Box<LLQueueAtomic>),
+  pub(super) threads:               Vec<ThreadRef>,
+  pub(super) local_thread:          (Thread, JobBuffer, Box<LLQueueAtomic>, Box<LLQueueAtomic>),
   pub(super) threads_started:       usize,
   pub(super) specialty_lut:         Box<dyn SpecializationTable>,
 }
 
-impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIALISTS: usize>
-  ThreadHost for AppThreadPool<JOB_POOL_SIZE, SPECIALTY_COUNT, MAX_SPECIALISTS>
-{
+impl ThreadHost for AppThreadPool {
   fn broadcast_message<'a>(&'a self) -> BroadcastIterator<'a> {
     BroadcastIterator {
       threads: self
@@ -154,11 +149,14 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
   }
 }
 
-impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIALISTS: usize>
-  AppThreadPool<JOB_POOL_SIZE, SPECIALTY_COUNT, MAX_SPECIALISTS>
-{
-  pub fn new(num_of_threads: usize) -> RumResult<Self> {
-    debug_assert!(JOB_POOL_SIZE <= u16::MAX as usize, "JOB_POOL_SIZE must be less than 65546");
+impl AppThreadPool {
+  pub fn new(
+    num_of_threads: usize,
+    job_buffer_size: usize,
+    num_of_specialists: usize,
+    num_of_specializations: usize,
+  ) -> RumResult<Self> {
+    debug_assert!(job_buffer_size <= u16::MAX as usize, "JOB_POOL_SIZE must be less than 65546");
 
     let (c_sender, receiver) = std::sync::mpsc::channel();
 
@@ -173,9 +171,9 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
       global_job_queue_ptr,
       global_free_queue,
       global_job_queue,
-    ) = create_queues("Global Free", "Global Job");
+    ) = create_queues(job_buffer_size, "Global Free", "Global Job");
     let mut specialty_lut =
-      Box::new(ThreadSpecializationTable::<MAX_SPECIALISTS, SPECIALTY_COUNT>::new());
+      Box::new(ThreadSpecializationTable::new(num_of_specialists, num_of_specializations));
 
     let specialty_lut_ptr = specialty_lut.as_mut() as *mut _;
 
@@ -183,6 +181,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
       .into_iter()
       .map(|id| {
         let (job_buffer, mut free_ptr, mut job_ptr, mut worker) = create_worker(
+          job_buffer_size,
           global_free_queue.clone(),
           global_job_queue.clone(),
           c_sender.clone(),
@@ -198,8 +197,8 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
           })
           .unwrap();
 
-        let free_queue = MTLLFIFOQueue16::new(free_ptr.as_mut(), job_buffer as *mut Job, "");
-        let job_queue = MTLLFIFOQueue16::new(job_ptr.as_mut(), job_buffer as *mut Job, "");
+        let free_queue = MTLLFIFOQueue16::new(free_ptr.as_mut(), get_job_queue_ptr(job_buffer), "");
+        let job_queue = MTLLFIFOQueue16::new(job_ptr.as_mut(), get_job_queue_ptr(job_buffer), "");
 
         ThreadRef {
           handle,
@@ -212,7 +211,8 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
       })
       .collect();
 
-    let (local_jobs, local_free_queue, local_jobs_queue, mut worker) = create_worker(
+    let (local_jobs, local_free_queue, local_jobs_queue, worker) = create_worker(
+      job_buffer_size,
       global_free_queue.clone(),
       global_job_queue.clone(),
       c_sender.clone(),
@@ -253,6 +253,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
       job_box: job_ptr,
       free_queue,
       job_queue,
+      ..
     } in self.threads.iter_mut()
     {
       if let Some(job) = free_queue.pop_front() {
@@ -320,9 +321,7 @@ impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIAL
   }
 }
 
-impl<const JOB_POOL_SIZE: usize, const SPECIALTY_COUNT: usize, const MAX_SPECIALISTS: usize> Drop
-  for AppThreadPool<JOB_POOL_SIZE, SPECIALTY_COUNT, MAX_SPECIALISTS>
-{
+impl Drop for AppThreadPool {
   fn drop(&mut self) {
     unsafe {
       for _ in self

@@ -4,59 +4,89 @@ use core::{
   time::Duration,
 };
 
-pub type Queue<const JOB_POOL_SIZE: usize> = *mut [Job; JOB_POOL_SIZE];
+pub type JobBuffer = *mut (usize, Job);
 
-pub fn create_queue<const JOB_POOL_SIZE: usize>() -> Queue<JOB_POOL_SIZE> {
+fn create_queue_layout(job_pool_size: usize) -> std::alloc::Layout {
+  let layout_job_buffer =
+    std::alloc::Layout::array::<Job>(job_pool_size).expect("Could not build JOB array");
+
+  let layout_usize = std::alloc::Layout::new::<usize>();
+
+  let (main_layout, _) =
+    layout_usize.extend(layout_job_buffer).expect("Could not build Combined array");
+  main_layout
+}
+
+pub fn create_queue(job_pool_size: usize) -> JobBuffer {
   unsafe {
-    debug_assert!(JOB_POOL_SIZE <= u16::MAX as usize, "JOB_POOL_SIZE must be less than 65546");
+    debug_assert!(job_pool_size <= u16::MAX as usize, "JOB_POOL_SIZE must be less than 65546");
 
-    let layout = std::alloc::Layout::new::<[Job; JOB_POOL_SIZE]>();
-    let jobs = std::alloc::alloc(layout) as *mut [Job; JOB_POOL_SIZE];
-    let job_ref = &mut *jobs;
-    for (i, job) in job_ref.iter_mut().enumerate() {
+    let main_layout = create_queue_layout(job_pool_size);
+
+    let ptr = std::alloc::alloc(main_layout);
+    let job_ptr: JobBuffer = std::mem::transmute(ptr);
+
+    (&mut *job_ptr).0 = job_pool_size;
+
+    for (i, job) in get_job_slice(job_ptr).iter_mut().enumerate() {
       std::mem::forget(std::mem::replace(job, Job::default()));
 
       job.id = i as u16;
-      job.next = if i < (JOB_POOL_SIZE - 1) { (i + 1) as u16 } else { u16::MAX };
+      job.next = if i < (job_pool_size - 1) { (i + 1) as u16 } else { u16::MAX };
     }
 
-    jobs
+    job_ptr
   }
 }
 
-pub fn free_queue<const JOB_POOL_SIZE: usize>(queue: Queue<JOB_POOL_SIZE>) {
+pub fn free_queue(queue: JobBuffer) {
   unsafe {
-    for job in (*queue).iter_mut() {
+    let slice = get_job_slice(queue);
+    let len = slice.len();
+
+    for job in slice {
       let _ = Box::from_raw(job.fence);
       let _ = job.task.take();
     }
 
-    let layout = std::alloc::Layout::new::<[Job; JOB_POOL_SIZE]>();
-    std::alloc::dealloc(queue as *mut _, layout);
+    let main_layout = create_queue_layout(len);
+
+    std::alloc::dealloc(queue as *mut _, main_layout);
   }
 }
 
-pub(crate) fn create_queues<const JOB_POOL_SIZE: usize>(
+unsafe fn get_job_slice<'a>(queue: JobBuffer) -> &'a mut [Job] {
+  let job_pool_size = (&mut *queue).0;
+  std::slice::from_raw_parts_mut(get_job_queue_ptr(queue), job_pool_size)
+}
+
+pub(crate) fn get_job_queue_ptr(queue: *mut (usize, Job)) -> *mut Job {
+  &mut (unsafe { &mut *queue }).1
+}
+
+unsafe fn get_job_ptr<'a>(queue: JobBuffer) -> &'a mut [Job] {
+  let job_pool_size = (&mut *queue).0;
+  std::slice::from_raw_parts_mut(&mut (&mut *queue).1, job_pool_size)
+}
+
+pub(crate) fn create_queues(
+  job_pool_size: usize,
   free_name: &'static str,
   job_name: &'static str,
-) -> (
-  *mut [Job; JOB_POOL_SIZE],
-  Box<LLQueueAtomic>,
-  Box<LLQueueAtomic>,
-  MTLLFIFOQueue16<Job>,
-  MTLLFIFOQueue16<Job>,
-) {
-  let jobs: *mut [Job; JOB_POOL_SIZE] = create_queue();
-  let mut free_queue_ptr = Box::new(LLQueueAtomic::new(0, JOB_POOL_SIZE as u16 - 1));
+) -> (JobBuffer, Box<LLQueueAtomic>, Box<LLQueueAtomic>, MTLLFIFOQueue16<Job>, MTLLFIFOQueue16<Job>)
+{
+  let jobs = create_queue(job_pool_size);
+
+  let mut free_queue_ptr = Box::new(LLQueueAtomic::new(0, job_pool_size as u16 - 1));
   let mut job_queue_ptr = Box::new(LLQueueAtomic::new_empty());
   let free_queue = MTLLFIFOQueue16 {
-    nodes: jobs as *mut _,
+    nodes: get_job_queue_ptr(jobs),
     list: &mut *free_queue_ptr,
     #[cfg(debug_assertions)]
     name: free_name,
   };
   let job_queue = MTLLFIFOQueue16 {
-    nodes: jobs as *mut _,
+    nodes: get_job_queue_ptr(jobs),
     list: &mut *job_queue_ptr,
     #[cfg(debug_assertions)]
     name: job_name,

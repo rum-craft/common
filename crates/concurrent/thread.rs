@@ -40,6 +40,7 @@ pub struct MessageDispatcher<'a> {
 }
 
 impl<'a> MessageDispatcher<'a> {
+  #[track_caller]
   pub fn dispatch<T: FnOnce(&Thread) + Send + Sync + 'static>(mut self, task: T) {
     unsafe {
       if let Some(job) = self.free_queue.pop_front() {
@@ -85,6 +86,7 @@ impl<'a> Iterator for BroadcastIterator<'a> {
 pub trait ThreadHost {
   /// Allows a unique message to be sent directly to every thread reachable by
   /// this host
+  #[track_caller]
   fn broadcast_message<'a>(&'a self) -> BroadcastIterator<'a>;
 
   fn __add_global_task_base(&self, task: Task, fence: bool) -> Option<Fence>;

@@ -59,7 +59,7 @@ impl<'a> Drop for SpinLockLock<'a> {
 #[test]
 fn spin_lock() -> crate::error::RumResult<()> {
   use crate::ThreadHost;
-  let mut pool = crate::AppThreadPool::<2>::new(1)?;
+  let mut pool = crate::AppThreadPool::new(1, 2, 0, 0)?;
   pool.monitor();
 
   let lock = std::sync::Arc::new(SpinLock::new());
