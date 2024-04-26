@@ -1,6 +1,6 @@
-use num_traits::Num;
+pub use num_traits::Num;
 
-use super::ScalarFloat;
+pub use super::ScalarFloat;
 
 pub trait VectorSum: Clone + Copy {
   type Output: Clone + Copy;

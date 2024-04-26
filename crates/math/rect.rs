@@ -259,6 +259,10 @@ where
       && self.tr().x >= rhs.bl().x
       && self.tr().y >= rhs.bl().y;
   }
+
+  pub fn moved(&self, pos: Vec2<T>) -> Self {
+    Rectangle { bottom_left: self.bottom_left + pos, top_right: self.top_right + pos }
+  }
 }
 
 impl<T> Add<Vec2<T>> for Rectangle<T>

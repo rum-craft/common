@@ -74,8 +74,9 @@ where
 
   /// Returns the nth row of the matrix.
   /// # Example
-  /// ```
-  /// use rum_keg::primitives::Matrix;
+  /// ```rust
+  /// use rum_math::*;
+  ///
   /// let matrix = Matrix::<3, 3, f32, Vec3<f32>>::identity();
   /// let row0 = matrix.row(0);
   /// let row1 = matrix.row(1);
@@ -92,13 +93,16 @@ where
   /// Returns the nth column of the matrix.
   /// This is slower than row() because it has to do a partial transpose of the
   /// matrix. # Example
+  ///
   /// ```
-  /// use rum_keg::primitives::Matrix;
+  /// use rum_math::*;
+  ///
   /// let a = Matrix::<3, 3, f32, Vec3<f32>>::from_rows([
   ///   Vec3::new(1.0, 2.0, 3.0),
   ///   Vec3::new(4.0, 5.0, 6.0),
   ///   Vec3::new(7.0, 8.0, 9.0),
   /// ]);
+  ///
   /// assert_eq!(a.column(0), Vec3::new(1.0, 4.0, 7.0));
   /// assert_eq!(a.column(1), Vec3::new(2.0, 5.0, 8.0));
   /// assert_eq!(a.column(2), Vec3::new(3.0, 6.0, 9.0));
@@ -116,14 +120,20 @@ impl<M> Mat44<M>
 where
   M: ScalarFloat,
 {
+  /// Orthographic rendering with the origin placed in the top left of the
+  /// drawing area and the Y axis increases from the top of the screen to the
+  /// bottom.
   pub fn top_left_ortho(width: M, height: M, near: M, far: M) -> Self {
     let _0 = M::zero();
-    Self::ortho(width, _0, -height, _0, near, far)
+    Self::ortho(width, _0, height, _0, near, far)
   }
 
+  /// Orthographic rendering with the origin placed in the bottom left of the
+  /// drawing area and the Y axis increases from the bottom of the screen
+  /// towards the top
   pub fn bottom_left_ortho(width: M, height: M, near: M, far: M) -> Self {
     let _0 = M::zero();
-    Self::ortho(width, _0, _0, -height, near, far)
+    Self::ortho(width, _0, _0, height, near, far)
   }
 
   pub fn center_ortho(width: M, height: M, near: M, far: M) -> Self {
@@ -136,12 +146,12 @@ where
   /// Create an orthographic projection matrix.
   /// # Example
   /// ```
-  /// use rum_keg::primitives::Matrix;
+  /// use rum_math::*;
   /// let matrix = Matrix::<4, 4, f32, Vec4>::ortho(1.0, 0.0, 1.0, 0.0, 0.0, 1.0);
   /// ```
   ///
   /// # See also
-  /// [top_left_ortho](Matrix::top_left_ortho)
+  /// [top_left_ortho]{Matrix::top_left_ortho}
   /// [bottom_left_ortho](Matrix::bottom_left_ortho)
   pub fn ortho(right: M, left: M, top: M, bottom: M, near: M, far: M) -> Self {
     let f_min_n = far - near;
@@ -171,7 +181,7 @@ where
   /// Create a perspective projection matrix.
   /// # Example
   /// ```
-  /// use rum_keg::primitives::Matrix;
+  /// use rum_math::*;
   /// let matrix = Matrix::<4, 4, f32, Vec4>::perspective(1.0, 1.0, 0.0, 1.0);
   /// ```
   pub fn perspective(
