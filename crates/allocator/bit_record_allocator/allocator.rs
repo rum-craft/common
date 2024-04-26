@@ -9,7 +9,6 @@ use super::{bit_block_bit_type::BlockBits, block_record::BlockRecord};
 
 pub(crate) struct BlockIter<BitType: BlockBits> {
   pub(crate) header: BlockRecord<BitType>,
-  pub(crate) mode:   usize,
   pub(crate) index:  usize,
 }
 
@@ -128,16 +127,17 @@ impl<
   > RcBlockAllocator<BASE_ALLOC_SIZE, BitType, A, MANAGER_ALLOCATOR>
 {
   #[inline(always)]
-  pub fn base_allocation_size(size: usize) -> usize {
+  pub fn base_allocation_size() -> usize {
     0
   }
 
   #[inline(always)]
-  pub fn base_header_size(size: usize) -> usize {
+  pub fn base_header_size() -> usize {
     0
   }
 
   #[inline(always)]
+  #[allow(unused)]
   pub(crate) fn data(&self) -> *mut u8 {
     unsafe { self.0.as_mut().unwrap_unchecked().data }
   }
@@ -171,7 +171,7 @@ unsafe impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, A: Allocator> Allo
     layout: std::alloc::Layout,
   ) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
     let size = layout.size();
-    match unsafe { self.alloc(size) } {
+    match self.alloc(size) {
       Some(ptr) => Ok(unsafe {
         std::ptr::NonNull::<[u8]>::new_unchecked(std::ptr::slice_from_raw_parts_mut(ptr, size))
       }),
@@ -373,6 +373,7 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits>
 impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: bool>
   BlockRecordAllocator<BASE_ALLOC_SIZE, BitType, MANAGER_ALLOCATOR>
 {
+  #[allow(unused)]
   pub(crate) fn record_snapshot(&self) -> Box<[u8]> {
     self.get_data().into()
   }
@@ -402,7 +403,7 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
         .0
     };
 
-    let ptr = (self as *const _ as *mut u8);
+    let ptr = self as *const _ as *mut u8;
 
     let alloc_offset = alloc_struct.size() + alloc_struct.padding_needed_for(par_allocator.align());
 
@@ -456,7 +457,7 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
       let mut off = 1;
       for i in 1..8 {
         let lut = BitType::power_shift_lut();
-        let coverage = (diff << lut[i - 1]);
+        let coverage = diff << lut[i - 1];
         sizes[i] = sizes[i] - coverage;
         offsets[i] = off;
         off += sizes[i] as u32;
@@ -513,6 +514,7 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
     }
   }
 
+  #[allow(unused)]
   pub fn is_empty(&self) -> bool {
     self.records()[0].is_empty()
   }
@@ -796,7 +798,14 @@ impl<const BASE_ALLOC_SIZE: usize, BitType: BlockBits, const MANAGER_ALLOCATOR: 
 
     match &mut block.get_nibble(bit_index) {
       Empty => {
-        panic!("This bit should be allocated {block_index}{bit_index}")
+        panic!(
+          "This bit should be allocated {current_level} {block_index} {bit_index}: 
+          failed_ptr_offset: {ptr_offset}
+          pool_size: {} 
+          pool_start: 0x{:x}
+          {self:?}",
+          self.data_len, self.data as usize
+        )
       }
       Sub => {
         panic!("This block should be head start")
@@ -1056,6 +1065,7 @@ pub(crate) fn find_range_offset<BitType: BlockBits>(len: usize, mut free_bits: B
 }
 
 #[inline(always)]
+#[allow(unused)]
 pub(crate) fn select_child_field<BitType: BlockBits>(
   current_depth: usize,
   in_field_block_index: usize,

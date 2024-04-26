@@ -64,8 +64,14 @@ impl<BitType: BlockBits> BlockRecord<BitType> {
 
   #[inline(always)]
   pub(crate) fn get_nibble(&self, offset: usize) -> BitState {
-    let l = unsafe { ((self.alloc_bits_l.unsigned_shr(offset as u32)) & BitType::one()).to_u8().unwrap_unchecked() };
-    let h = unsafe { ((self.sub_alloc_bits_h.unsigned_shr(offset as u32)) & BitType::one()).to_u8().unwrap_unchecked() };
+    let l = unsafe {
+      ((self.alloc_bits_l.unsigned_shr(offset as u32)) & BitType::one()).to_u8().unwrap_unchecked()
+    };
+    let h = unsafe {
+      ((self.sub_alloc_bits_h.unsigned_shr(offset as u32)) & BitType::one())
+        .to_u8()
+        .unwrap_unchecked()
+    };
     let nibble = l as u8 | ((h as u8) << 1);
     BitState::from(nibble)
   }
@@ -109,9 +115,13 @@ impl<BitType: BlockBits> BlockRecord<BitType> {
   /// block.
   #[inline(always)]
   pub fn get_super_state(&self) -> BitState {
-    self.is_full().then_some(Full).unwrap_or_else(|| self.is_empty().then_some(Empty).unwrap_or(Partial))
+    self
+      .is_full()
+      .then_some(Full)
+      .unwrap_or_else(|| self.is_empty().then_some(Empty).unwrap_or(Partial))
   }
 
+  #[allow(unused)]
   pub fn len(&self) -> usize {
     BitType::bit_count()
   }

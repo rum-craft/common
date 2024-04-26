@@ -96,7 +96,7 @@ pub fn basic_allocations() {
     *last = 'd' as u8;
 
     let allocatted_string =
-      String::from_utf8(std::slice::from_raw_parts(data.data(), ("hello world".len())).to_vec())
+      String::from_utf8(std::slice::from_raw_parts(data.data(), "hello world".len()).to_vec())
         .expect("should be utf8 (ASCII)");
 
     debug_assert_eq!(allocatted_string, "hello world");
@@ -141,7 +141,7 @@ pub fn inter_block_allocations() {
   let allocator = BlockRecordAllocator::<1, u32, _>::new(1024).expect("Should be fine!");
   dbg!(&allocator);
   let r = NSReporter::new("alloc");
-  let ptr = allocator.alloc(25).expect("should have space");
+  let _ = allocator.alloc(25).expect("should have space");
   r.report();
   dbg!(&allocator);
   let r = NSReporter::new("alloc");
@@ -155,7 +155,7 @@ pub fn inter_block_allocations() {
 }
 
 #[test]
-pub fn massive_allocation_1GB() {
+pub fn massive_allocation_1_gb() {
   let r = NSReporter::new("create");
   let allocator = BlockRecordAllocator::<4096, u32, _>::new(_1GB).expect("Should be fine!");
 
@@ -206,15 +206,15 @@ pub fn massive_allocation_1GB() {
 pub fn multi_block_allocations() {
   let allocator = BlockRecordAllocator::<4, u16, _>::new(512).expect("Should be fine!");
 
-  let ptr = allocator.alloc(1).expect("should have space");
+  let _ = allocator.alloc(1).expect("should have space");
   dbg!(&allocator);
   let ptr_a = allocator.alloc(3).expect("should have space");
   dbg!(&allocator);
   let ptr_b = allocator.alloc(8).expect("should have space");
   dbg!(&allocator);
-  let ptr_c = allocator.alloc(3).expect("should have space");
+  let _ = allocator.alloc(3).expect("should have space");
   dbg!(&allocator);
-  let ptr_c = allocator.alloc(3).expect("should have space");
+  let _ = allocator.alloc(3).expect("should have space");
   dbg!(&allocator);
   let ptr_c = allocator.alloc(64).expect("should have space");
   dbg!(&allocator);
@@ -234,21 +234,20 @@ pub fn large_allocation_followed_by_small_allocation() {
     BlockRecordAllocator::<128, u32, _, true>::new_managed(std::ptr::null_mut(), 8388608)
       .expect("Should be fine!");
 
-  let ptr = allocator.alloc(4194304).expect("Should have space");
+  let _ = allocator.alloc(4194304).expect("Should have space");
 
-  let ptr = allocator.alloc(4096).expect("Should have space");
+  let _ = allocator.alloc(4096).expect("Should have space");
 
-  let ptr = allocator.alloc(4096).expect("Should have space");
+  let _ = allocator.alloc(4096).expect("Should have space");
 
   let ptr = allocator.alloc(128).expect("Should have space");
   dbg!(&allocator);
-  allocator.free(ptr);
+  allocator.free(ptr).expect("failed to free");
   dbg!(&allocator);
 }
 
 #[test]
 pub fn tesdst() {
-  let r = NSReporter::new("create");
   let allocator =
     BlockRecordAllocator::<4096, u32, _, true>::new_managed(std::ptr::null_mut(), _1GB)
       .expect("Should be fine!");
@@ -758,7 +757,7 @@ pub fn tesdst() {
 
   // dbg!(&allocator);
 
-  for ((size, ptr)) in allocations {
+  for (size, ptr) in allocations {
     if size == 3555328 {
       dbg!(&allocator);
       println!("{size} {}", ptr as usize / 4096 / 32);
@@ -780,15 +779,12 @@ pub fn fuzz_test_random_allocations() {
   let random_state = std::collections::hash_map::RandomState::new();
   let mut rn = random_state.build_hasher().finish();
 
-  let mut i = 0;
-
   let r = NSReporter::new("alloc");
   loop {
     let old = rn;
     let val = 1024 * (rn & 0xFF0);
 
     if val > 0 {
-      i += 1;
       match allocator.alloc(val as usize) {
         Some(ptr) => allocations.push((ptr, val)),
         None => {
@@ -805,7 +801,7 @@ pub fn fuzz_test_random_allocations() {
   r.report();
 
   if false {
-    for (ptr, val) in &allocations {
+    for (_, val) in &allocations {
       println!(r###"({val}, allocator.alloc({val}).expect("Pointer should be valid")),"###);
     }
   }
@@ -814,7 +810,7 @@ pub fn fuzz_test_random_allocations() {
   println!("len: {}", allocations.len());
 
   let r = NSReporter::new("free");
-  for (ptr, val) in allocations {
+  for (ptr, _) in allocations {
     allocator.free(ptr).expect("Should free");
   }
   r.report();
@@ -829,12 +825,10 @@ pub fn fuzz_test_random_allocations() {
 #[test]
 fn large_non_power_of_2_allocations() {
   let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(208896, 64).unwrap()) };
-  let allocator =
-    BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 208896 as usize).unwrap();
+  let _ = BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 208896 as usize).unwrap();
 
   let ptr = unsafe { std::alloc::alloc(Layout::from_size_align(41763456, 64).unwrap()) };
-  let allocator =
-    BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 41763456 as usize).unwrap();
+  let _ = BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 41763456 as usize).unwrap();
 }
 
 #[test]
@@ -843,7 +837,7 @@ fn large_non_power_of_2_allocation() {
   let allocator =
     BlockRecordAllocator::<128, u32, _, true>::new_managed(ptr, 41763456 as usize).unwrap();
 
-  allocator.free(allocator.alloc(41000000 - 4194304).unwrap());
+  allocator.free(allocator.alloc(41000000 - 4194304).unwrap()).expect("failed to free");
 
   dbg!(allocator);
 }
