@@ -5,3 +5,12 @@ edition = "2021"
 
 [lib]
 path = "./lib.rs"
+
+[dependencies.rum_logger]
+path = "../log"
+
+[dependencies.rum_profile_macro]
+path = "../profile_proc_macro"
+
+[dependencies]
+libc = "0.2.154"

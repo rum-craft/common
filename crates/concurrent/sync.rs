@@ -29,7 +29,7 @@ use std::{
 /// });
 /// ```
 pub struct Fence {
-  /// Pointer the atomic U32 stored in the
+  /// Pointer to the atomic reference counter; stored in the
   /// the Job that owns the fence.
   __fence: *mut AtomicU32,
   id:      usize,
@@ -72,6 +72,18 @@ impl Fence {
         }
         std::mem::forget(self);
       }
+    }
+  }
+
+  /// Waits for all references to this fences to be dropped, implying a thread
+  /// has started the associated task.
+  pub fn sync_wait(self, sleep_intervals_ns: u64) {
+    unsafe {
+      atomic_decr(self.__fence);
+      while (*self.__fence).load(Relaxed) > 0 {
+        std::thread::sleep(Duration::from_nanos(sleep_intervals_ns));
+      }
+      std::mem::forget(self);
     }
   }
 }

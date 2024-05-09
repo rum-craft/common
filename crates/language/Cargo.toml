@@ -1,0 +1,26 @@
+[package]
+name = "rum_lang"
+version = "0.0.0"
+edition = "2021"
+
+build = "build.rs"
+
+[lib]
+path = "./lib.rs"
+
+[dependencies.rum_hash]
+path = "../hash"
+
+[dependencies.rum_container]
+path = "../container"
+
+[dependencies.rum_istring]
+path = "../istring"
+
+[dependencies.radlr_rust_runtime]
+path = "../../../lib_radlr/crates/radlr-rust-runtime"
+
+[build_dependencies.radlr_build]
+path = "../../../lib_radlr/crates/radlr-build"
+
+

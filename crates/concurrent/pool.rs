@@ -4,6 +4,8 @@ use std::{
   time::Duration,
 };
 
+use rum_logger::dbg_println;
+
 use crate::{containers::get_job_queue_ptr, error::RumResult, BroadcastIterator, ThreadId};
 
 use super::{
@@ -39,7 +41,7 @@ fn create_worker(
   (local_jobs, local_free_queue_ptr, local_job_queue_ptr, worker)
 }
 
-struct ThreadRef {
+pub(super) struct ThreadRef {
   handle:     JoinHandle<()>,
   job_buffer: JobBuffer,
   free_box:   Box<LLQueueAtomic>,
@@ -48,6 +50,7 @@ struct ThreadRef {
   job_queue:  MTLLFIFOQueue16<Job>,
 }
 
+#[allow(unused)]
 pub struct AppThreadPool {
   pub(super) num_of_threads:        usize,
   pub(super) c_signal:              Receiver<ThreadSays>,
@@ -233,10 +236,13 @@ impl AppThreadPool {
     })
   }
 
-  /// Stalls the main thread until all threads complete their startup process.
+  /// Blocks the main thread until all threads complete their startup process.
+  ///
+  /// During this time the main thread may participate in processing any
+  /// queued tasks.
   pub fn await_startup(&mut self) {
     while self.threads_started < self.thread_count() {
-      eprintln!("Awaiting thread startup");
+      dbg_println!("Awaiting thread startup");
       self.monitor();
       std::thread::sleep(Duration::from_micros(100));
     }
@@ -287,7 +293,7 @@ impl AppThreadPool {
         if let Ok(message) = self.c_signal.recv_timeout(Duration::from_micros(1)) {
           match message {
             ThreadSays::Initialized(thread_id) => {
-              eprintln!("Thread {thread_id} Started");
+              dbg_println!("Thread {thread_id} Started");
               self.threads_started += 1;
               break;
             }
@@ -301,14 +307,14 @@ impl AppThreadPool {
     while let Ok(message) = self.c_signal.recv_timeout(Duration::from_micros(1)) {
       match message {
         ThreadSays::Initialized(thread_id) => {
-          eprintln!("Thread {thread_id} Started");
+          dbg_println!("Thread {thread_id} Started");
           self.threads_started += 1;
         }
         ThreadSays::Parked(thread_id) => {
-          eprintln!("Thread {thread_id} Parked");
+          dbg_println!("Thread {thread_id} Parked");
         }
         ThreadSays::Halted(thread_id) => {
-          eprintln!("Thread {thread_id} Halted");
+          dbg_println!("Thread {thread_id} Halted");
           self.threads_started -= 1;
         }
         _ => {}
@@ -340,7 +346,7 @@ impl Drop for AppThreadPool {
         .map(|(join, job_store, ..)| {
           match join.join() {
             Err(_err) => {
-              eprintln!("Error occured while freeing thread resources")
+              dbg_println!("Error occured while freeing thread resources")
             }
             Ok(_) => {}
           }

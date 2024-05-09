@@ -64,11 +64,6 @@ pub(crate) fn get_job_queue_ptr(queue: *mut (usize, Job)) -> *mut Job {
   &mut (unsafe { &mut *queue }).1
 }
 
-unsafe fn get_job_ptr<'a>(queue: JobBuffer) -> &'a mut [Job] {
-  let job_pool_size = (&mut *queue).0;
-  std::slice::from_raw_parts_mut(&mut (&mut *queue).1, job_pool_size)
-}
-
 pub(crate) fn create_queues(
   job_pool_size: usize,
   free_name: &'static str,
@@ -123,6 +118,7 @@ pub trait MTLLNode16 {
 #[cfg_attr(target_arch = "x86_64", repr(align(64)))]
 pub struct LLQueueAtomic {
   info:    AtomicU32,
+  #[allow(unused)]
   #[cfg(debug_assertions)]
   counter: AtomicU32,
 }

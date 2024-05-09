@@ -67,12 +67,12 @@ fn spin_lock() -> crate::error::RumResult<()> {
   let l = lock.clone();
 
   pool.add_task(move |_| {
-    let id = l.lock();
+    let _ = l.lock();
     println!("Locked in worker thread");
     println!("Unlocking")
   });
 
-  let locker = lock.lock();
+  let _ = lock.lock();
   println!("Locked From Main thread");
 
   std::thread::sleep(Duration::from_secs(1));

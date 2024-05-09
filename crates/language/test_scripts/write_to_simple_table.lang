@@ -1,0 +1,30 @@
+[ Players : std140                          ]
+[ x - y  - z                                ]
+[ r - g  - b                                ]
+[ a - b  - c - d - e - f - g                ]
+( f32, f32, f32, f32, f32, f32, f32, f32    )
+
+global players:Players
+
+global npcs:Players<players#id>
+  
+main { test }
+
+/// This allows the module's tables to be initialized
+init {
+  
+  // Resets player data
+  for player :init[2] players {
+    player.x = 10
+    player.y = 1000
+  }
+
+  /// Resets NPC data
+  for d :init[200] npcs {
+    d.x = 1
+    d.y = 2
+    d.b = 3
+    d.g = -1e-20
+  }
+}
+

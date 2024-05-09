@@ -6,10 +6,13 @@ members = [
     "./crates/buffer",
     "./crates/allocator",
     "./crates/profile",
+    "./crates/profile_proc_macro",
     "./crates/concurrent",
     "./crates/container",
     "./crates/math",
-    "./crates/log"
+    "./crates/log",
+    "./crates/database",
+    "./crates/language"
 ]
 
 exclude = [

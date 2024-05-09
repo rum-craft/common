@@ -5,7 +5,6 @@ use std::time::Duration;
 #[test]
 fn allows_non_blocking_waiting_on_fence() -> crate::error::RumResult<()> {
   use std::time::Duration;
-  let i = 1;
 
   let mut pool = AppThreadPool::new(6, 1024, 0, 0)?;
 
@@ -24,7 +23,7 @@ fn allows_non_blocking_waiting_on_fence() -> crate::error::RumResult<()> {
 
   pool.monitor();
 
-  let fence2 = pool.add_fenced_task(move |thread| {
+  let fence2 = pool.add_fenced_task(move |_| {
     eprintln!("Finished22");
     fence.wait();
   });
@@ -85,7 +84,7 @@ fn provides_return_values_through_signals_stack() -> crate::error::RumResult<()>
     signal
   }
 
-  let mut signal = test(&mut pool);
+  let _ = test(&mut pool);
 
   Ok(())
 }
@@ -93,20 +92,15 @@ fn provides_return_values_through_signals_stack() -> crate::error::RumResult<()>
 #[test]
 fn handles_async_tasks() -> crate::error::RumResult<()> {
   use std::time::Duration;
-  let i = 1;
 
-  let mut pool = AppThreadPool::new(24, 1024, 0, 0)?;
+  let pool = AppThreadPool::new(24, 1024, 0, 0)?;
 
-  async fn sleep(dur: Duration) {
-    for _ in 0..dur.as_micros() {}
-  }
-
-  let mut fence = pool.add_fenced_task(|t| {
+  let fence = pool.add_fenced_task(|t| {
     println!("Goodby, World {}", t.id());
   });
 
   for _ in 0..80 {
-    let mut fence2 = fence.clone();
+    let fence2 = fence.clone();
 
     pool.add_async_task(async move {
       println!("Hello, World");
@@ -135,7 +129,7 @@ fn handles_async_tasks() -> crate::error::RumResult<()> {
         std::thread::sleep(Duration::from_micros(1000));
 
         let v = f.await;
-        f1.await;
+        let _ = f1.await;
 
         println!("{:?}", v.map(|v| v.len()));
 

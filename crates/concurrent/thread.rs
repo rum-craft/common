@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use rum_logger::dbg_println;
+
 use crate::error::RumResult;
 
 use super::{
@@ -551,7 +553,7 @@ impl Thread {
 
       Task::Command(command) => match command {
         ThreadDo::HaltQueued => {
-          println!("Thread {} acknowledges pending halt", self.id);
+          dbg_println!("Thread {} acknowledges pending halt", self.id);
           self.halt_pending = true;
           TaskHandlingResult::Continue
         }
@@ -605,7 +607,7 @@ impl Thread {
         self.futures[index] = FeatureParkingSpot::Free(self.first_free);
         self.first_free = Some(index);
         match result {
-          Err(err) => println!("TODO: Place in logger: {err}"),
+          Err(err) => dbg_println!("TODO: Place in logger: {err}"),
           Ok(_) => {}
         }
       }
@@ -630,7 +632,7 @@ impl Thread {
         let specialization_lut = unsafe { &mut *self.specialization_lut };
 
         if specialization_lut.register(self, specialization) {
-          println!("Thread {} registered as a specialist in {specialization}", self.id);
+          dbg_println!("Thread {} registered as a specialist in {specialization}", self.id);
           self.specialization_policy.merge(policy);
         }
         return;
@@ -651,7 +653,7 @@ impl Thread {
       /// Give other threads a chance to pick up the specialization
       std::thread::sleep(Duration::from_micros(200));
     } else {
-      println!("Sepecialization request for a {} specialist has failed", specialization);
+      dbg_println!("Sepecialization request for a {} specialist has failed", specialization);
     }
   }
 
@@ -701,7 +703,7 @@ impl Thread {
     if let Err(err) = self.send_message(ThreadSays::Initialized(self.id.0 as usize)) {
       /// Comm error. Something serious happened to the Main thread.
       /// need to halt.
-      println!("Thread {} failed to register communication with main thread.", self.id);
+      dbg_println!("Thread {} failed to register communication with main thread.", self.id);
       return;
     }
 

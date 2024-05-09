@@ -5,6 +5,3 @@ edition = "2021"
 
 [lib]
 path = "./lib.rs"
-
-[dependencies.rum_concurrent]
-path = "../concurrent"

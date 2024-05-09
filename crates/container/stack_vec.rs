@@ -1,4 +1,5 @@
 use core::ops::{Index, IndexMut};
+use std::fmt::Debug;
 
 #[derive(Default)]
 pub(crate) enum StackData<const STACK_SIZE: usize, T: Sized> {
@@ -19,6 +20,17 @@ pub(crate) enum StackData<const STACK_SIZE: usize, T: Sized> {
 pub struct StackVec<const STACK_SIZE: usize, T: Sized> {
   pub(crate) inner:       StackData<STACK_SIZE, T>,
   pub(crate) allocations: usize,
+  pub(crate) iter_index:  usize,
+}
+
+impl<const STACK_SIZE: usize, T: Debug> Debug for StackVec<STACK_SIZE, T> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let mut s = f.debug_struct("StackVec");
+
+    s.field("data", &self.as_slice());
+
+    s.finish()
+  }
 }
 
 impl<const STACK_SIZE: usize, T> Index<usize> for StackVec<STACK_SIZE, T> {
@@ -100,9 +112,30 @@ impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
   #[inline(always)]
   pub fn new() -> Self {
     Self {
-      inner:       StackData::StackData(unsafe { core::mem::zeroed() }),
+      inner:       StackData::StackData(unsafe { std::mem::MaybeUninit::uninit().assume_init() }),
       allocations: 0,
+      iter_index:  0,
     }
+  }
+
+  pub fn clear(&mut self) {
+    let mut new_data =
+      StackData::StackData(unsafe { std::mem::MaybeUninit::uninit().assume_init() });
+
+    std::mem::swap(&mut self.inner, &mut new_data);
+
+    match new_data {
+      StackData::StackData(data) => {
+        for i in 0..self.allocations {
+          drop(unsafe { core::mem::transmute_copy::<T, T>(&data[i]) });
+        }
+        core::mem::forget(data);
+      }
+      StackData::VecData(vec) => drop(vec),
+      StackData::None => {}
+    }
+
+    self.allocations = 0;
   }
 
   pub fn len(&self) -> usize {
@@ -115,6 +148,10 @@ impl<const STACK_SIZE: usize, T: Sized> StackVec<STACK_SIZE, T> {
 
   pub fn iter<'stack>(&'stack self) -> StackVecIterator<'stack, STACK_SIZE, T> {
     StackVecIterator { inner: self, tracker: 0, len: self.len() }
+  }
+
+  pub fn iter_mut<'stack>(&'stack mut self) -> StackVecIteratorMut<'stack, STACK_SIZE, T> {
+    StackVecIteratorMut { len: self.len(), inner: self, tracker: 0 }
   }
 
   pub fn push(&mut self, element: T) {
@@ -202,6 +239,31 @@ impl<'stack, const STACK_SIZE: usize, T> Iterator for StackVecIterator<'stack, S
       match &self.inner.inner {
         StackData::StackData(data) => Some(&data[index]),
         StackData::VecData(vec) => Some(&vec[index]),
+        StackData::None => None,
+      }
+    } else {
+      None
+    }
+  }
+}
+
+pub struct StackVecIteratorMut<'stack, const STACK_SIZE: usize, T> {
+  inner:   &'stack mut StackVec<STACK_SIZE, T>,
+  tracker: usize,
+  len:     usize,
+}
+
+impl<'stack, const STACK_SIZE: usize, T> Iterator for StackVecIteratorMut<'stack, STACK_SIZE, T> {
+  type Item = &'stack mut T;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.tracker < self.len {
+      let index = self.tracker;
+      self.tracker += 1;
+      let inner: *mut StackVec<STACK_SIZE, T> = self.inner as *mut _;
+      match &mut (unsafe { &mut *inner }).inner {
+        StackData::VecData(vec) => Some(&mut vec[index]),
+        StackData::StackData(data) => Some(&mut data[index]),
         StackData::None => None,
       }
     } else {

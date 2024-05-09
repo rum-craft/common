@@ -9,6 +9,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "libc"
+version = "0.2.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae743338b92ff9146ce83992f766a31066a91a8c84a45e0e9f21e7cf6de6d346"
+
+[[package]]
 name = "num-traits"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16,6 +22,59 @@ checksum = "39e3200413f237f41ab11ad6d161bc7239c84dcb631773ccd7de3dfe4b5c267c"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "once_cell"
+version = "1.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "radlr_ascript"
+version = "1.0.1-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_build"
+version = "0.0.0"
+dependencies = [
+ "radlr_ascript",
+ "radlr_bytecode",
+ "radlr_core",
+ "radlr_formatter",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_bytecode"
+version = "1.0.1-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_core"
+version = "1.0.1-beta2"
+dependencies = [
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_formatter"
+version = "1.0.1-beta1"
+dependencies = [
+ "radlr_core",
+ "radlr_rust_runtime",
+]
+
+[[package]]
+name = "radlr_rust_runtime"
+version = "1.0.1-beta1"
 
 [[package]]
 name = "rum_allocator"
@@ -33,12 +92,24 @@ version = "0.0.0"
 [[package]]
 name = "rum_concurrent"
 version = "0.0.0"
+dependencies = [
+ "rum_logger",
+]
 
 [[package]]
 name = "rum_container"
 version = "0.0.0"
 dependencies = [
  "rum_math",
+]
+
+[[package]]
+name = "rum_db"
+version = "0.0.0"
+dependencies = [
+ "rum_container",
+ "rum_istring",
+ "rum_profile",
 ]
 
 [[package]]
@@ -49,15 +120,24 @@ version = "0.0.0"
 name = "rum_istring"
 version = "0.0.0"
 dependencies = [
+ "once_cell",
  "rum_hash",
+]
+
+[[package]]
+name = "rum_lang"
+version = "0.0.0"
+dependencies = [
+ "radlr_build",
+ "radlr_rust_runtime",
+ "rum_container",
+ "rum_hash",
+ "rum_istring",
 ]
 
 [[package]]
 name = "rum_logger"
 version = "0.0.0"
-dependencies = [
- "rum_concurrent",
-]
 
 [[package]]
 name = "rum_math"
@@ -68,4 +148,17 @@ dependencies = [
 
 [[package]]
 name = "rum_profile"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "rum_logger",
+ "rum_profile_macro",
+]
+
+[[package]]
+name = "rum_profile_macro"
+version = "0.0.0"
+
+[[package]]
+name = "rum_window"
 version = "0.0.0"

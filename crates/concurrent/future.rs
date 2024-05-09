@@ -20,7 +20,7 @@ impl<T: Send + Clone> ThreadFuture<T> {
 
       let c = completed.clone();
 
-      thread.add_task(move |t| {
+      thread.add_task(move |_| {
         if let Some(thread) = Thread::get_thread() {
           let result = threaded_function(thread);
           match c.lock() {
@@ -156,21 +156,21 @@ impl LocalWaker {
     RawWaker::new(std::ptr::null() as *const _, &Self::VIRTUAL_FUNCTION_TABLE)
   }
 
-  unsafe fn drop(rw: *const ()) {
+  unsafe fn drop(_: *const ()) {
     //let rw = rw as *mut LocalWaker;
     //let _ = Box::from_raw(rw);
   }
 
-  unsafe fn wake(rw: *const ()) {
+  unsafe fn wake(_: *const ()) {
     //Self::wake_by_ref(rw);
     //Self::drop(rw);
   }
 
-  unsafe fn wake_by_ref(rw: *const ()) {
+  unsafe fn wake_by_ref(_: *const ()) {
     //let rw = &*(rw as *mut Self);
   }
 
-  unsafe fn clone(rw: *const ()) -> RawWaker {
+  unsafe fn clone(_: *const ()) -> RawWaker {
     //let rw = &*(rw as *mut LocalWaker);
     LocalWaker::new_raw()
   }

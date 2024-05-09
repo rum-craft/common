@@ -2,19 +2,23 @@ use std::{
   collections::HashMap,
   fmt::Debug,
   path::{Path, PathBuf},
-  sync::{Arc, LockResult, RwLock, RwLockReadGuard},
+  sync::{LockResult, RwLock, RwLockReadGuard},
 };
 
+use once_cell::sync::Lazy;
 use rum_hash::create_u64_hash;
 
 type InnerStringStore = HashMap<IString, String>;
 
+static GLOBAL_STORE: Lazy<IStringStore> =
+  Lazy::new(|| IStringStore { _data: RwLock::new(InnerStringStore::new()) });
+
 #[cfg(test)]
 mod test;
 
-#[derive(Default, Clone)]
-pub struct IStringStore {
-  _data: Arc<RwLock<InnerStringStore>>,
+#[derive(Default)]
+struct IStringStore {
+  _data: RwLock<InnerStringStore>,
 }
 
 impl Debug for IStringStore {
@@ -99,6 +103,7 @@ impl std::fmt::Debug for IString {
         let mut s = f.debug_tuple("IString::Large");
         // This is an interned string.
         s.field(&self.0);
+        s.field(&self.to_str().as_str());
         s.finish()
       } else {
         let mut s = f.debug_tuple("IString::Small");
@@ -133,19 +138,29 @@ impl IString {
     !self.is_small()
   }
 
-  pub fn to_string(&self, store: &IStringStore) -> String {
-    self.to_str(store).as_str().to_string()
+  pub fn to_string(&self) -> String {
+    self.to_str().as_str().to_string()
   }
 
-  pub fn to_path(&self, store: &IStringStore) -> PathBuf {
-    PathBuf::from(self.to_str(store).as_str().to_string())
+  pub fn to_path(&self) -> PathBuf {
+    PathBuf::from(self.to_str().as_str().to_string())
   }
 
   /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
   /// token represents.
-  pub fn to_str<'a>(self, store: &'a IStringStore) -> GuardedStr<'a> {
+  pub fn to_str<'a>(self) -> GuardedStr<'a> {
     if self.is_large() {
-      store.get_str(self).unwrap()
+      GLOBAL_STORE.get_str(self).unwrap()
+    } else {
+      GuardedStr(self, Some(self), None)
+    }
+  }
+
+  /// Returns a [GuardedStr] that can be used to access the `&str` the [IString]
+  /// token represents.
+  pub fn to_str_global<'a>(self) -> GuardedStr<'a> {
+    if self.is_large() {
+      GLOBAL_STORE.get_str(self).unwrap()
     } else {
       GuardedStr(self, Some(self), None)
     }
@@ -171,6 +186,7 @@ impl IString {
     out
   }
 
+  #[inline]
   fn from_bytes(string: &[u8]) -> Self {
     if string.is_empty() {
       Self(0)
@@ -210,12 +226,23 @@ pub trait CachedString {
   }
   /// Returns a IString after interning the string within
   /// the given store. Only `LargeString` sub-types are interned.
-  fn intern(&self, store: &IStringStore) -> IString {
+  fn intern(&self) -> IString {
     let bytes = self.get_bytes();
     let token = IString::from_bytes(bytes);
 
     if bytes.len() > 7 {
-      store.intern(self.get_string(), token)
+      GLOBAL_STORE.intern(self.get_string(), token)
+    } else {
+      token
+    }
+  }
+
+  fn intern_global(&self) -> IString {
+    let bytes = self.get_bytes();
+    let token = IString::from_bytes(bytes);
+
+    if bytes.len() > 7 {
+      GLOBAL_STORE.intern(self.get_string(), token)
     } else {
       token
     }

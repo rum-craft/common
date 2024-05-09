@@ -1,0 +1,97 @@
+[ Canvas: homogenous ]( ivec4 )
+  
+[Health:Players] [health] (f32)
+
+[ Soldiers ] ( f32, f32, f32 )
+
+[ Brushes ]( f32 )
+
+global players:Players
+
+
+global npcs:Soldiers
+
+global paint_canvas: 
+
+init {
+  player :init[100,100] paint_canvas
+}
+
+main {
+  
+  let image = :load("image_path.png") Canvas
+
+  :GPU {
+    for row : paint_canvas, image_row : image where { image#idx == row#idx } 
+    {
+      row[..] = image[..]
+    }
+
+    if row : paint_canvas, brush: brushes where { 
+      abs(brush.pos.y - f32(row#i)) < brush.diameter / 2
+    }
+    {
+      
+    }
+  }
+}
+  
+  main_loop {
+    let dead_players;
+    let active_players;
+  
+    for [player: players, npc: npcs] where { 
+      let x = player.x-y-z as vec3;
+      let b = npc.x-y-z as vec3;
+      
+      sqrt(abs(x - b)) < 2.0;
+      
+      player.x == npc.x; 
+      player.x > 100; 
+      npx.x > 100; 
+    } {
+      if player.health <= 0.0 {
+        dead_players.add(player)
+      } else {
+        player.health -= 1.0
+        active_players <- player
+      }
+    }
+    
+    for [player: dead_players]{ print("You Lose!") }
+  
+    for [#index, player: active_players, box: ui_boxes] where box.player = player
+    {
+      box.index_pos = index 
+      :changed { 
+        animating_boxes <- &box 
+        :inserted {
+          $duration = 200;
+          $end_value = 400;
+          $val = &box.index_pos;
+        } 
+        :updated {
+          $val = &box.index_pos;
+        }
+      }
+  
+      box.display_length = box.width / player.health :changed { 
+        animating_boxes <- &box
+      }
+    }
+    
+    for anim: animating_boxes {
+      .time += fps_time;
+      
+      .val = .start_value + (a) time
+  
+      sync(.val)
+    }
+  
+  
+    :GPU {
+      for [ui_box: boxes, ]{
+        /** GLSL **/
+      }
+    }
+  }

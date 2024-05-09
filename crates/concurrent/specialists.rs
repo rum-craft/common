@@ -1,5 +1,3 @@
-use crate::specialists;
-
 use super::{job::Task, AppThreadPool, Thread, ThreadHost};
 use std;
 
@@ -59,28 +57,28 @@ impl Drop for ThreadSpecializationTable {
 impl SpecializationTable for ThreadSpecializationTable {
   #[track_caller]
   fn get_specialist(&self, specialty: usize) -> Option<&Thread> {
-    let COLUMNS = self.specialist_per_specialization;
-    let ROWS = self.specializations;
+    let columns = self.specialist_per_specialization;
+    let rows = self.specializations;
 
-    debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
+    debug_assert!(columns > 0 && rows > 0, "Thread specialization is disabled");
 
-    if COLUMNS == 0 || ROWS == 0 {
+    if columns == 0 || rows == 0 {
       return None;
     }
 
     let row = specialty;
 
     debug_assert!(
-      row < ROWS,
-      "Thread tried to post job with specialty {row}, which exceeds the number of global thread specialties {ROWS}",
+      row < rows,
+      "Thread tried to post job with specialty {row}, which exceeds the number of global thread specialties {rows}",
     );
 
-    if row >= ROWS {
+    if row >= rows {
       return None;
     }
 
     let specialists =
-      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * columns) as isize), columns) };
 
     let result =
       specialists.iter().find_map(|i| if !i.is_null() { Some(unsafe { &**i }) } else { None });
@@ -90,22 +88,22 @@ impl SpecializationTable for ThreadSpecializationTable {
 
   #[track_caller]
   fn post_job(&self, task: Task, specialty: usize) -> Option<Task> {
-    let COLUMNS = self.specialist_per_specialization;
-    let ROWS = self.specializations;
-    debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
+    let columns = self.specialist_per_specialization;
+    let rows = self.specializations;
+    debug_assert!(columns > 0 && rows > 0, "Thread specialization is disabled");
 
-    if COLUMNS == 0 || ROWS == 0 {
+    if columns == 0 || rows == 0 {
       return Some(task);
     }
 
     let row = specialty;
 
     debug_assert!(
-      row < ROWS,
-      "Thread tried to post job with specialty {row}, which exceeds the number of global thread specialties {ROWS}",
+      row < rows,
+      "Thread tried to post job with specialty {row}, which exceeds the number of global thread specialties {rows}",
     );
 
-    if row >= ROWS {
+    if row >= rows {
       return Some(task);
     }
 
@@ -130,11 +128,11 @@ impl SpecializationTable for ThreadSpecializationTable {
 
   #[track_caller]
   fn register(&mut self, thread: &mut Thread, specialty: usize) -> bool {
-    let COLUMNS = self.specialist_per_specialization;
-    let ROWS = self.specializations;
-    debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
+    let columns = self.specialist_per_specialization;
+    let rows = self.specializations;
+    debug_assert!(columns > 0 && rows > 0, "Thread specialization is disabled");
 
-    if COLUMNS == 0 || ROWS == 0 {
+    if columns == 0 || rows == 0 {
       return false;
     }
 
@@ -143,27 +141,24 @@ impl SpecializationTable for ThreadSpecializationTable {
     let row = specialty;
 
     debug_assert!(
-      row < ROWS,
-      "Thread {} tried to register specialty {row}, which exceeds the number of global thread specialties {ROWS}",
+      row < rows,
+      "Thread {} tried to register specialty {row}, which exceeds the number of global thread specialties {rows}",
       thread.id
     );
 
-    if row >= ROWS {
+    if row >= rows {
       return false;
     }
 
     let specialists =
-      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * columns) as isize), columns) };
 
     if let Some((index, _)) = specialists.iter().enumerate().find(|(_, i)| (**i).is_null()) {
-      let column = index;
-
       match self.lock.lock() {
         Err(err) => {
           eprintln!("{err}");
         }
         Ok(_) => {
-          let mut j = 0;
           specialists[index] = identity;
           return true;
         }
@@ -175,12 +170,12 @@ impl SpecializationTable for ThreadSpecializationTable {
 
   #[track_caller]
   fn deregister(&mut self, thread: &mut Thread, specialty: usize) -> bool {
-    let COLUMNS = self.specialist_per_specialization;
-    let ROWS = self.specializations;
+    let columns = self.specialist_per_specialization;
+    let rows = self.specializations;
 
-    debug_assert!(COLUMNS > 0 && ROWS > 0, "Thread specialization is disabled");
+    debug_assert!(columns > 0 && rows > 0, "Thread specialization is disabled");
 
-    if COLUMNS == 0 || ROWS == 0 {
+    if columns == 0 || rows == 0 {
       return false;
     }
 
@@ -189,29 +184,24 @@ impl SpecializationTable for ThreadSpecializationTable {
     let row = specialty;
 
     debug_assert!(
-      row < ROWS,
-      "Thread {} tried to deregister specialty {row}, which exceeds the number of global thread specialties {ROWS}",
+      row < rows,
+      "Thread {} tried to deregister specialty {row}, which exceeds the number of global thread specialties {rows}",
       thread.id
     );
 
-    if row >= ROWS {
+    if row >= rows {
       return false;
     }
 
     let specialists =
-      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * COLUMNS) as isize), COLUMNS) };
+      unsafe { std::slice::from_raw_parts_mut(self.lut.offset((row * columns) as isize), columns) };
 
     if let Some((index, _)) = specialists.iter().enumerate().find(|(_, i)| **i == identity) {
-      let column = index;
-
-      todo!("Implement locking for table updates!");
-
       match self.lock.lock() {
         Err(err) => {
           eprintln!("{err}");
         }
         Ok(_) => {
-          let mut j = 0;
           specialists[index] = std::ptr::null_mut();
         }
       }
@@ -287,7 +277,7 @@ pub struct SpecializationPolicy {
 
 impl SpecializationPolicy {
   pub fn build<T: Into<usize> + Copy>(priority: SpecializationPriority, family: &[T]) -> Self {
-    let mut specializations = family.iter().fold(0, |a: usize, b| (a | (1usize << ((*b).into()))));
+    let specializations = family.iter().fold(0, |a: usize, b| (a | (1usize << ((*b).into()))));
 
     Self { specializations, priority }
   }
