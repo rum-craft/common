@@ -1,6 +1,6 @@
 IGNORE { c:sp c:nl tk:cmt::comment }
 
-IMPORT primitives as prim
+IMPORT primitive as prim
 IMPORT comment as cmt
 
 <> GPU_block > ":GPU" "{" "}"

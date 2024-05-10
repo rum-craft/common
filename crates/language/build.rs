@@ -12,7 +12,10 @@ fn main() -> RadlrResult<()> {
 
   let grammar_root_dir =
     workspace_dir.join(GRAMMAR_PATH).canonicalize().expect("Could not find RADLR grammar dir");
-  let out_dir = Path::new(BUILD_OUTPUT_PATH).canonicalize().expect("Could not find output dir");
+  let out_dir = Path::new(&std::env::var("OUT_DIR").unwrap())
+    .canonicalize()
+    .expect("Could not find output dir")
+    .join(BUILD_OUTPUT_PATH);
 
   println!(
     "cargo:rerun-if-changed={}",

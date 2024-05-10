@@ -1,4 +1,14 @@
-use std::path::{Path, PathBuf};
+use std::{
+  collections::BTreeMap,
+  path::{Path, PathBuf},
+};
+
+use rum_istring::{CachedString, IString};
+
+use crate::compiler::{
+  interpreter::ll::{interpret_ll_function, LLValue},
+  parser::{self, parse_LL},
+};
 
 use super::{
   runner::{interpret_string, RumScriptResult},
@@ -29,10 +39,28 @@ fn write_to_simple_table() -> RumScriptResult<()> {
   Ok(())
 }
 
-fn temp() {
-  let input = r###"
-  
+#[test]
+fn run_ll_script() -> RumScriptResult<()> {
+  let (input, _) = get_source_file("run_ll_script.lang")?;
 
-  
-  "###;
+  let funct = parse_LL(&input)?;
+
+  dbg!(&funct);
+
+  let mut f32_val: f32 = 0.0;
+
+  let value = interpret_ll_function(&funct, &[
+    LLValue::f32(200000.0),
+    LLValue::ptr32(&mut f32_val as *mut f32 as *mut _, 1),
+  ]);
+
+  if let LLValue::ptr64(ptr, size) = value {
+    unsafe {
+      dbg!(std::slice::from_raw_parts(ptr as *mut f64, size));
+    }
+  }
+
+  dbg!((value, f32_val));
+
+  Ok(())
 }

@@ -7,7 +7,8 @@ use std::{collections::BTreeMap, sync::Arc};
 pub type RumScriptResult<T> = Result<T, RumScriptError>;
 
 pub fn interpret_string(input: &str, ctx: &mut Context) -> RumScriptResult<()> {
-  let output = super::super::parser::parse(input)?.into_RumScript().expect("Could not load script");
+  let output =
+    super::super::parser::parse_RS(input)?.into_RumScript().expect("Could not load script");
 
   let mut pending_table_generating = rum_container::StackVec::<8, _>::new();
 

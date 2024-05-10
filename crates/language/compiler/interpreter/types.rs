@@ -160,3 +160,10 @@ impl TableDefinition {
     types
   }
 }
+
+/*
+ * INDICES:
+ *    SORTED_COLUMN
+ *    PRIMARY_KEY
+ *
+ */

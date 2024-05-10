@@ -6,7 +6,7 @@
 
 global players:Players
 
-global npcs:Players<players#id>
+global npcs:Players
   
 main { test }
 
@@ -14,17 +14,74 @@ main { test }
 init {
   
   // Resets player data
-  for player :init[2] players {
-    player.x = 10
-    player.y = 1000
-  }
+  for player :init[2] players { player.x = 10 player.y = 1000 }
 
   /// Resets NPC data
-  for d :init[200] npcs {
-    d.x = 1
-    d.y = 2
-    d.b = 3
-    d.g = -1e-20
-  }
+  for d :init[200] npcs { d.x = 2 d.y = 2 d.b = 3 d.g = -1e-3 }
 }
 
+
+/*
+
+:index Space3D {}
+
+
+
+main { 
+
+  let SPACE :index Space3D<astroid.pos, projectile.pos, player.pos>;
+
+  loop [^A] {
+    
+    for key : keyboard where { 
+      key.id == space && key.is_down == true
+    } {
+      for a : active_projectile  {
+        a.pos += a.vel
+        a.life -= 1 :(0) { remove a }
+      }
+    }
+
+    for projectile: active_projectiles {
+      projectile.pos += projectile.vel;
+    }
+
+    // ----------------------------------- wait active_projectiles
+
+    // wait SPACE update from(active_projectiles[all-changed].pos);
+
+    // ----------------------------------- wait asteroids, player, SPACE(active_projectiles[..])
+
+    wait SPACE update from(asteroids^A[removed].pos);
+
+    for astroid: asteroids^A, projectile: active_projectile where { SPACE.distance(d < astroid.radius + projectile.radius) } { remove asteroid }
+
+    for player: player, projectile: active_projectile where { SPACE( #distance < player.radius + projectile.radius) } { 
+      with game : game_state[player] {
+        game.state = GAME_OVER;
+      }
+    }
+
+    :GPU-Graphics { 
+      // ----------------------------------- wait asteroids 
+      :vert idx( active_asteroids#len ) {
+
+        in astroid: active_asteroids
+
+        main {
+          const vertices vec3[] = [ (1,2,3), (2,3,4), (4,5,6), (7,8,9) ]
+
+          vertex = vertices(idx % 6) + astroid.pos
+        }
+      }
+
+  | arithmetic "log"{3}  arithmetic{3}
+      :frag { 
+        :main {
+          color[0] = vec4(1,0,1,1)
+        }
+      }
+    }
+  }
+}
+*/

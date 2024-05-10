@@ -17,6 +17,14 @@
    
    > tk:( c:num(+) )
 
+<> true
+   
+   > "true" 
+
+<> false
+   
+   > "false"
+
 <> comment 
   
   > line_comment | block_comment
@@ -30,3 +38,15 @@
 <> block_comment
   
   > '/' "*"  ( c:id | c:sp | c:sym | c:num | c:nl )(*) '*' "/"
+
+<> string 
+
+  > tk:( "\"" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "\"" )
+
+<> quote 
+  
+  > tk:( "'" ( c:id | c:num | c:nl | c:sym | c:sp | escaped )(*) "'" )
+
+<> escaped 
+
+  > "\\"{:9999} ( c:sym | c:num | c:sp | c:id )

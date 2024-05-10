@@ -1,0 +1,20 @@
+run( test:f32 r:*32 ) -> *32 {
+  
+  table_22: *64
+  table_22 := stack(22)
+
+  i: u32 
+
+  loop {
+    match i >= 0 {
+      true {
+        [table_22 + 0] = f64(test)
+        [table_22 + 1] = f64(test + [table_22])
+        [table_22 + 2] = f64(test * [table_22 + 1])
+      }
+      false { continue }
+    }
+  }
+
+  <- table_22
+}

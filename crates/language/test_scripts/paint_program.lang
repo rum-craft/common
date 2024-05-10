@@ -7,11 +7,9 @@
 [ Brushes ]( f32 )
 
 global players:Players
-
-
 global npcs:Soldiers
 
-global paint_canvas: 
+
 
 init {
   player :init[100,100] paint_canvas
@@ -54,7 +52,7 @@ main {
         dead_players.add(player)
       } else {
         player.health -= 1.0
-        active_players <- player
+        active_players <- (player#key, 0.0, 0.8, 0.2);
       }
     }
     

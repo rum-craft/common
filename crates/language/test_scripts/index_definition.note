@@ -1,0 +1,28 @@
+INDEX {
+
+  table_id row_real_index key(TYPE)
+
+  --------------------------- Internal Table Tracking Operations
+  table_row_added(table_id: u32 row_real_index: u32)                         // malloc
+  table_row_removed(table_id, row_real_index)                       // dalloc
+  table_row_changed(table_id, row_real_index )                      // ------
+  table_row_moved(table_id, row_real_index_old, row_real_index_new) // realloc
+  ----------------------------------------------------------------------------
+
+  --------------------------- Public QUERY interfaces
+  QUERY<table_id_a, table_id_b, ..., filters>(args) => (table_id_a[row_a_real_index], table_id_b[row_b_real_index])[]
+  ...
+  ----------------------------------------------------------------------------
+}
+
+
+TABLE INSTANCE {
+
+  data 
+
+  squama
+
+  free_slot_index
+
+  INDEXES[]
+}

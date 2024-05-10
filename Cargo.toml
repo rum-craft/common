@@ -11,6 +11,7 @@ members = [
     "./crates/container",
     "./crates/math",
     "./crates/log",
+    "./crates/window",
     "./crates/database",
     "./crates/language"
 ]
