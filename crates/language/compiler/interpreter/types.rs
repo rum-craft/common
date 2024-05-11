@@ -4,7 +4,7 @@ use rum_istring::{CachedString, IString};
 
 use radlr_rust_runtime::types::Token;
 
-use crate::compiler::parser::{GlobalTable, RowType, Table_row_typesValues};
+use crate::compiler::parser::{table_row_types_Value, GlobalTable, RowType};
 
 #[derive(Debug)]
 pub(super) struct TableCursor {
@@ -83,10 +83,10 @@ impl From<&super::super::parser::TableDefinition<radlr_rust_runtime::types::Toke
 {
   fn from(value: &super::super::parser::TableDefinition<radlr_rust_runtime::types::Token>) -> Self {
     let (column_types, is_uniform) = match &value.types {
-      Table_row_typesValues::RowTypeDeclaration(rows) => {
+      table_row_types_Value::RowTypeDeclaration(rows) => {
         (rows.types.iter().map(|r| r.as_ref().clone()).collect::<Vec<_>>(), None)
       }
-      Table_row_typesValues::UniformTypeDeclaration(uniform_row) => (
+      table_row_types_Value::UniformTypeDeclaration(uniform_row) => (
         vec![RowType { name: uniform_row.r#type.clone(), attributes: Default::default() }],
         Some(uniform_row.size),
       ),

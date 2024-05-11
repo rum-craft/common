@@ -1,18 +1,18 @@
-run( test:f32 r:*32 ) -> *32 {
+*32 <- table_row_added( test:f32 r:*32 ) {
   
-  table_22: *64
-  table_22 := stack(22)
+  table_22:*32          // ptr(*32, null, 0)
+  table_22 = heap(100)  // ptr(*32, #mem, 22)
 
-  i: u32 
+  i:u32 
+  i = 99
 
   loop {
-    match i >= 0 {
+    match i > 0 {
       true {
-        [table_22 + 0] = f64(test)
-        [table_22 + 1] = f64(test + [table_22])
-        [table_22 + 2] = f64(test * [table_22 + 1])
+        [table_22 + i] = f32(0)
+        i = i-1
+        continue
       }
-      false { continue }
     }
   }
 

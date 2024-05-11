@@ -5,7 +5,7 @@ IMPORT primitive as prim
 IMPORT expression as expr
 
 <> low_level_function 
-  > tk:( id "\(" )  var_type_binding(+)^params ")" ( "->" type  )?^return_type  block
+  > ( type "<-" :ast $1 )?^return_type tk:( id "\(" )  var_type_binding(+)^params ")" block
 
     :ast { t_LL_function, params, return_type, block  }
 
@@ -96,9 +96,9 @@ IMPORT expression as expr
 
 <> assignment 
 
-  > (id | memory_location )^location "=" expression ";"?
+  > (id | memory_location ) "=" expression ";"?
 
-    :ast { t_LL_Assign, location, expression  }
+    :ast { t_LL_Assign, location: $1, expression  }
 
   | id "=" "heap(" (primitive_unsigned_integer | id)^byte_count ")" ";"? 
 
@@ -145,7 +145,7 @@ IMPORT expression as expr
 
   | prim::string^val
 
-    :ast { t_LL_String, val:str($val)  }
+    :ast { t_LL_Str, val:str($val)  }
   
   | prim::true
 
@@ -160,21 +160,21 @@ IMPORT expression as expr
 
   > prim::sci_num
 
-    :ast { t_LL_Number, val:f64($1) }
+    :ast { t_LL_Num, val:f64($1) }
 
 
 <> primitive_unsigned_integer 
 
   > prim::uint
 
-    :ast { t_LL_UnsignedInteger, val:i64($1) }
+    :ast { t_LL_Uint, val:i64($1) }
 
 
 <> primitive_integer 
 
   > prim::int
 
-    :ast { t_LL_Integer, val:i64($1) }
+    :ast { t_LL_Int, val:i64($1) }
 
 
 <> table_type
@@ -282,37 +282,37 @@ IMPORT expression as expr
 
 <> arithmetic 
   
-  > arithmetic^right   "+"{1}  arithmetic{1}^left
+  > arithmetic^left   "+"{1}  arithmetic{1}^right
     
-    :ast { t_Add, left, right, tok }
+    :ast { t_Add, right, left, tok }
 
-  | arithmetic^right   "-"{1}  arithmetic{1}^left
+  | arithmetic^left   "-"{1}  arithmetic{1}^right
     
-    :ast { t_Sub, left, right, tok }
+    :ast { t_Sub, right, left, tok }
 
-  | arithmetic^right   "*"{2}  arithmetic{2}^left
+  | arithmetic^left   "*"{2}  arithmetic{2}^right
     
-    :ast { t_Mul, left, right, tok }
+    :ast { t_Mul, right, left, tok }
 
-  | arithmetic^right   "/"{2}  arithmetic{2}^left
+  | arithmetic^left   "/"{2}  arithmetic{2}^right
     
-    :ast { t_Div, left, right, tok }
+    :ast { t_Div, right, left, tok }
 
-  | arithmetic^right   "%"{2}  arithmetic{2}^left
+  | arithmetic^left   "%"{2}  arithmetic{2}^right
     
-    :ast { t_Mod, left, right, tok }
+    :ast { t_Mod, right, left, tok }
 
-  | arithmetic^right  "**"{3}  arithmetic{3}^left
+  | arithmetic^left  "**"{3}  arithmetic{3}^right
     
-    :ast { t_Pow, left, right, tok }
+    :ast { t_Pow, right, left, tok }
 
-  | arithmetic^right  "//"{3}  arithmetic{3}^left
+  | arithmetic^left  "//"{3}  arithmetic{3}^right
     
-    :ast { t_Root, left, right, tok }
+    :ast { t_Root, right, left, tok }
 
-  | arithmetic^right "log"{3}  arithmetic{3}^left
+  | arithmetic^left "log"{3}  arithmetic{3}^right
     
-    :ast { t_Log, left, right, tok }
+    :ast { t_Log, right, left, tok }
 
   | Term
 

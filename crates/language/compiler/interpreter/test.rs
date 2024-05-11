@@ -54,9 +54,9 @@ fn run_ll_script() -> RumScriptResult<()> {
     LLValue::ptr32(&mut f32_val as *mut f32 as *mut _, 1),
   ]);
 
-  if let LLValue::ptr64(ptr, size) = value {
+  if let LLValue::ptr32(ptr, size) = value {
     unsafe {
-      dbg!(std::slice::from_raw_parts(ptr as *mut f64, size));
+      dbg!(std::slice::from_raw_parts(ptr as *mut f32, size));
     }
   }
 

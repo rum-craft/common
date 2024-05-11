@@ -16,13 +16,13 @@ pub fn interpret_string(input: &str, ctx: &mut Context) -> RumScriptResult<()> {
 
   for statement in output.statements {
     match statement {
-      Root_blocksValues::TableDefinition(global_definition) => {
+      statement_Value::TableDefinition(global_definition) => {
         integrate_table_definition(&global_definition, ctx)?;
       }
 
-      Root_blocksValues::GlobalTable(global_table) => pending_table_generating.push(global_table),
+      statement_Value::GlobalTable(global_table) => pending_table_generating.push(global_table),
 
-      Root_blocksValues::InitExeBlock(block) => {
+      statement_Value::InitExeBlock(block) => {
         init_block = Some(block);
       }
 
@@ -39,10 +39,10 @@ pub fn interpret_string(input: &str, ctx: &mut Context) -> RumScriptResult<()> {
   if let Some(init_block) = init_block {
     for stmt in init_block.stmts {
       match stmt {
-        Table_initializationValues::TableInit(init) => {
+        table_initialization_Value::TableInit(init) => {
           table_init(&init, ctx);
         }
-        Table_initializationValues::TableZeroInit(init) => {
+        table_initialization_Value::TableZeroInit(init) => {
           table_zero_init(&init, ctx);
         }
         _ => {}
