@@ -1,16 +1,18 @@
+use crate::compiler::{
+  interpreter::ll::{
+    interpreter::{BitSize, LLVal, PtrData},
+    jit::compile_ll_function,
+  },
+  parser::{self, parse_ll},
+};
+use rum_istring::{CachedString, IString};
 use std::{
   collections::BTreeMap,
   path::{Path, PathBuf},
 };
 
-use rum_istring::{CachedString, IString};
-
-use crate::compiler::{
-  interpreter::ll::{interpret_ll_function, LLValue},
-  parser::{self, parse_LL},
-};
-
 use super::{
+  ll::{jit::optimize_ssa_function, x86::compile_from_ssa_fn},
   runner::{interpret_string, RumScriptResult},
   types::Context,
 };
@@ -40,27 +42,16 @@ fn write_to_simple_table() -> RumScriptResult<()> {
 }
 
 #[test]
-fn run_ll_script() -> RumScriptResult<()> {
+fn compile_ll_script() -> RumScriptResult<()> {
   let (input, _) = get_source_file("run_ll_script.lang")?;
 
-  let funct = parse_LL(&input)?;
+  let funct = parse_ll(&input)?;
 
-  dbg!(&funct);
+  let ssa_fn = compile_ll_function(&funct)?;
 
-  let mut f32_val: f32 = 0.0;
+  let optimized_ssa_fn = optimize_ssa_function(&ssa_fn);
 
-  let value = interpret_ll_function(&funct, &[
-    LLValue::f32(200000.0),
-    LLValue::ptr32(&mut f32_val as *mut f32 as *mut _, 1),
-  ]);
-
-  if let LLValue::ptr32(ptr, size) = value {
-    unsafe {
-      dbg!(std::slice::from_raw_parts(ptr as *mut f32, size));
-    }
-  }
-
-  dbg!((value, f32_val));
+  compile_from_ssa_fn(&optimized_ssa_fn);
 
   Ok(())
 }

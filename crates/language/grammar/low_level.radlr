@@ -5,6 +5,7 @@ IMPORT primitive as prim
 IMPORT expression as expr
 
 <> low_level_function 
+
   > ( type "<-" :ast $1 )?^return_type tk:( id "\(" )  var_type_binding(+)^params ")" block
 
     :ast { t_LL_function, params, return_type, block  }
@@ -42,21 +43,21 @@ IMPORT expression as expr
 
   | id ":=" pointer_cast ";"?
 
-    :ast { t_LL_PointerCastBinding, id, pointer_cast }
+    :ast { t_LL_PointerCastBinding, id, pointer_cast, tok }
 
 
 <> var_type_binding 
   
   > id ":" type^ty
 
-    :ast { t_LL_Var_Binding, id, ty }
+    :ast { t_LL_Var_Binding, id, ty, tok }
 
 
 <> continue 
   
   > "continue" ";"?
     
-    :ast { t_LL_Continue }
+    :ast { t_LL_Continue, tok }
 
 
 <> id 
@@ -68,16 +69,16 @@ IMPORT expression as expr
 
 <> loop 
   
-  > "loop {" statements(+)^statements "}"
+  > "loop" block
 
-    :ast { t_LL_Loop, statements  }
+    :ast { t_LL_Loop, block, tok  }
 
 
 <> match 
 
-  > "match" logical^expression "{" match_statement(+)^statements "}"
+  > "match" ( boolean | arithmetic )^expression  "{" match_statement(+)^statements "}"
 
-    :ast { t_LL_Match, expression, statements  }
+    :ast { t_LL_Match, expression, statements, tok  }
   
 
 <> match_statement 
@@ -89,9 +90,9 @@ IMPORT expression as expr
 
 <> match_case 
   
-  > primitive_value block
+  > ( primitive_bool | primitive_number ) block
 
-    :ast { t_LL_MatchCase, primitive_value, block  }
+    :ast { t_LL_MatchCase, val:$1, block, tok  }
 
 
 <> assignment 
@@ -100,11 +101,11 @@ IMPORT expression as expr
 
     :ast { t_LL_Assign, location: $1, expression  }
 
-  | id "=" "heap(" (primitive_unsigned_integer | id)^byte_count ")" ";"? 
+  | id "<-" "heap(" (primitive_unsigned_integer | id)^byte_count ")" ";"? 
 
     :ast { t_LL_HeapAllocate, id, byte_count  }
 
-  | id ":=" "stack(" (primitive_unsigned_integer | id)^byte_count ")" ";"? 
+  | id "<-" "stack(" (primitive_unsigned_integer | id)^byte_count ")" ";"? 
 
     :ast { t_LL_StackAllocate, id, byte_count  }
 
@@ -139,6 +140,16 @@ IMPORT expression as expr
   | table_type
 
 
+<> primitive_bool 
+
+  > prim::true
+
+    :ast { t_LL_True }
+
+  | prim::false
+
+    :ast { t_LL_False }
+
 <> primitive_value
 
   > primitive_number
@@ -146,14 +157,6 @@ IMPORT expression as expr
   | prim::string^val
 
     :ast { t_LL_Str, val:str($val)  }
-  
-  | prim::true
-
-    :ast { t_LL_True }
-
-  | prim::false
-
-    :ast { t_LL_False }
 
 
 <> primitive_number 
@@ -218,41 +221,56 @@ IMPORT expression as expr
   > arithmetic
 
 
-<> logical 
+<> boolean 
 
-  > logical^left "=="{1}  logical{1}^right
-    
-    :ast { t_EQ, left, right } 
-
-  | logical^left "!="{0}  logical{0}^right
-    
-    :ast { t_NE, left, right } 
-
-  | logical^left ">="{0}  logical{0}^right
-    
-    :ast { t_GE, left, right } 
-
-  | logical^left "<="{0}  logical{0}^right
-    
-    :ast { t_LE, left, right } 
-
-  | logical^left  ">"{0}  logical{0}^right
-    
-    :ast { t_GR, left, right } 
-
-  | logical^left  "<"{0}  logical{0}^right
-    
-    :ast { t_LS, left, right } 
-
-  | logical^left "||"{0}  logical{0}^right
+  > boolean^left "||"{1}  boolean{1}^right
     
     :ast { t_OR, left, right } 
 
-  | logical^left "&&"{0}  logical{0}^right
+  | boolean^left "|||"{2}  boolean{2}^right
     
-    :ast { t_AND, left, right } 
+    :ast { t_XOR, left, right } 
 
-  | arithmetic
+  | boolean^left "&&"{3}  boolean{3}^right
+    
+    :ast { t_AND, left, right }
+
+  | logical
+
+  | "(" boolean ")"
+    
+    :ast $2
+
+
+<> logical 
+
+  > arithmetic^left "=="{3}  arithmetic{3}^right
+    
+    :ast { t_EQ, left, right } 
+
+  | arithmetic^left "!="{3}  arithmetic{3}^right
+    
+    :ast { t_NE, left, right } 
+
+  | arithmetic^left ">="{3}  arithmetic{3}^right
+    
+    :ast { t_GE, left, right } 
+
+  | arithmetic^left "<="{3}  arithmetic{3}^right
+    
+    :ast { t_LE, left, right } 
+
+  | arithmetic^left  ">"{3}  arithmetic{3}^right
+    
+    :ast { t_GR, left, right } 
+
+  | arithmetic^left  "<"{3}  arithmetic{3}^right
+    
+    :ast { t_LS, left, right } 
+
+  | "!"{4} logical^expr{3}
+    
+    :ast { t_NOT, expr } 
 
 
 <> bitwise 

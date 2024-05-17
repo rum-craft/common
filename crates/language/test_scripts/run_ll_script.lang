@@ -1,17 +1,23 @@
-*32 <- table_row_added( test:f32 r:*32 ) {
+*32 <- table_row_added( test:f32 ) {
   
-  table_22:*32          // ptr(*32, null, 0)
-  table_22 = heap(100)  // ptr(*32, #mem, 22)
+  table_22:*32           // ptr(*32, null, 0)
+  table_22 <- heap(100)  // ptr(*32, #mem, 22)
 
-  i:u32 
+  table_33:*32
+  table_33 <- stack(test)
+
+  i:i32 
   i = 99
 
   loop {
-    match i > 0 {
+    match i >= 0 {
       true {
-        [table_22 + i] = f32(0)
+        [table_22 + 2 + i] = f32(0)
         i = i-1
-        continue
+        
+        match i >= 0 {
+          false { continue }
+        }
       }
     }
   }

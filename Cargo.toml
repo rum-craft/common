@@ -12,7 +12,6 @@ members = [
     "./crates/math",
     "./crates/log",
     "./crates/window",
-    "./crates/database",
     "./crates/language"
 ]
 

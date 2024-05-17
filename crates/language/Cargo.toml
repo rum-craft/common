@@ -8,6 +8,9 @@ build = "build.rs"
 [lib]
 path = "./lib.rs"
 
+[dependencies.rum_logger]
+path = "../log"
+
 [dependencies.rum_hash]
 path = "../hash"
 
@@ -23,4 +26,12 @@ path = "../../../lib_radlr/crates/radlr-rust-runtime"
 [build_dependencies.radlr_build]
 path = "../../../lib_radlr/crates/radlr-build"
 
+[dependencies]
+libc = "0.2.154"
+num-traits        = "0.2.17"
 
+[dependencies.iced-x86]
+version = "1.21.0"
+default-features = false
+# See below for all features
+features = ["std", "decoder", "masm"]

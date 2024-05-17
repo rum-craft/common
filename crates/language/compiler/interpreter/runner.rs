@@ -1,3 +1,4 @@
+#![allow(unused)]
 use rum_istring::IString;
 
 use super::{error::RumScriptError, types::Table, *};

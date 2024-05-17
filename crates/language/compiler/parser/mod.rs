@@ -3,8 +3,10 @@ use radlr_rust_runtime::{
   types::{ParserProducer, RuntimeDatabase, StringInput},
 };
 
+#[allow(warnings)]
 mod ast;
 
+#[allow(warnings)]
 mod parser;
 
 pub use radlr_rust_runtime::types::Token;
@@ -29,7 +31,7 @@ pub fn parse_RS(input: &str) -> Result<ASTNode, String> {
 }
 
 /// Parses input based on the LL grammar.
-pub fn parse_LL(input: &str) -> Result<LL_function<Token>, String> {
+pub fn parse_ll(input: &str) -> Result<LL_function<Token>, String> {
   let parser_db = parser::ParserDB::new();
   match parser_db.build_ast(
     &mut StringInput::from(input),

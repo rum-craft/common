@@ -9,6 +9,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "iced-x86"
+version = "1.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c447cff8c7f384a7d4f741cfcff32f75f3ad02b406432e8d6c878d56b1edf6b"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
+name = "lazy_static"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+
+[[package]]
 name = "libc"
 version = "0.2.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -104,15 +119,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rum_db"
-version = "0.0.0"
-dependencies = [
- "rum_container",
- "rum_istring",
- "rum_profile",
-]
-
-[[package]]
 name = "rum_hash"
 version = "0.0.0"
 
@@ -128,11 +134,15 @@ dependencies = [
 name = "rum_lang"
 version = "0.0.0"
 dependencies = [
+ "iced-x86",
+ "libc",
+ "num-traits",
  "radlr_build",
  "radlr_rust_runtime",
  "rum_container",
  "rum_hash",
  "rum_istring",
+ "rum_logger",
 ]
 
 [[package]]
