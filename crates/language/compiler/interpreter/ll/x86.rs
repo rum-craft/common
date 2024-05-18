@@ -1,39 +1,20 @@
+use crate::compiler::interpreter::ll::{
+  ssa_block_compiler::{from_flt, from_int, from_uint},
+  types::{BitSize, LLType, OpArg, SSAExpr, SSAFunction, SSAOp},
+};
+use rum_logger::todo_note;
 use std::{
   collections::{BTreeMap, HashMap},
   ops::Range,
 };
 
-use rum_logger::todo_note;
-
-use crate::compiler::interpreter::ll::{
-  interpreter::{IntData, IntVal, LLVal, PtrData, PtrType},
-  jit::{OpExpr, OpVal},
-};
-
-use super::{
-  interpreter::BitSize,
-  jit::{ExeBlock, LL_SSA_function, Op},
-};
+use super::types::{LLVal, SSABlock};
 
 const PAGE_SIZE: usize = 4096;
 
 struct Register {
   index: usize,
   val:   Option<LLVal>,
-}
-
-/// Operations that a register can perform.
-enum RegOperations {
-  MemPtr  = 0b1,
-  Integer = 0b10,
-  FLoat   = 0b100,
-  b8      = 0b1000,
-  b16     = 0b10000,
-  b32     = 0b100000,
-  b64     = 0b1000000,
-  b128    = 0b10000000,
-  b256    = 0b100000000,
-  b512    = 0b1000000000,
 }
 
 impl Register {
@@ -79,11 +60,11 @@ struct RegisterAllocator {
 impl RegisterAllocator {
   pub fn modify_register(
     &mut self,
-    from: &OpVal<GeneralRegisterName>,
-    to: &OpVal<()>,
-  ) -> OpVal<GeneralRegisterName> {
+    from: &OpArg<GeneralRegisterName>,
+    to: &OpArg<()>,
+  ) -> OpArg<GeneralRegisterName> {
     match from {
-      OpVal::REG(register_name, old_val) => {
+      OpArg::REG(register_name, old_val) => {
         let val = to.ll_val();
 
         if let Some((index, _)) =
@@ -91,7 +72,7 @@ impl RegisterAllocator {
         {
           self.allocation.insert(val, index);
           self.allocation.remove(old_val);
-          OpVal::REG(*register_name, val)
+          OpArg::REG(*register_name, val)
         } else {
           *from
         }
@@ -134,7 +115,7 @@ impl RegisterAllocator {
   }
 }
 
-pub fn compile_from_ssa_fn(funct: &LL_SSA_function<()>) {
+pub fn compile_from_ssa_fn(funct: &SSAFunction<()>) {
   const MALLOC: unsafe extern "C" fn(usize) -> *mut libc::c_void = libc::malloc;
   const FREE: unsafe extern "C" fn(*mut libc::c_void) = libc::free;
 
@@ -175,7 +156,6 @@ pub fn compile_from_ssa_fn(funct: &LL_SSA_function<()>) {
     .collect(),
   };
 
-  offset = print_instructions(&binary[0..], offset);
   dbg!(funct);
 
   let mut jmp_resolver =
@@ -187,41 +167,41 @@ pub fn compile_from_ssa_fn(funct: &LL_SSA_function<()>) {
     println!("START_BLOCK {} ---------------- \n", block.id);
     for op in &block.ops {
       let new_op = match op {
-        OpExpr::BinaryOp(op, out, left, right) => {
+        SSAExpr::BinaryOp(op, out, left, right) => {
           let right = convert_ssa_to_reg(right, &mut register);
           let left = convert_ssa_to_reg(left, &mut register);
 
           match op {
-            Op::ADD => {
+            SSAOp::ADD => {
               if left.is_reg() && !out.undefined() {
                 let out = register.modify_register(&left, out);
-                OpExpr::BinaryOp(*op, out, left, right)
+                SSAExpr::BinaryOp(*op, out, left, right)
               } else if right.is_reg() && !out.undefined() {
                 let out = register.modify_register(&right, out);
-                OpExpr::BinaryOp(*op, out, right, left)
+                SSAExpr::BinaryOp(*op, out, right, left)
               } else {
                 panic!("Invalid operands for {op:?} op  - l:{left:?} r:{right:?} ")
               }
             }
-            Op::GE => {
+            SSAOp::GE => {
               // The outgoing operand is not used.
-              OpExpr::BinaryOp(*op, OpVal::Lit(LLVal::Und), left, right)
+              SSAExpr::BinaryOp(*op, OpArg::Undefined, left, right)
             }
             _ => {
               let out = convert_ssa_to_reg(out, &mut register);
-              OpExpr::BinaryOp(*op, out, left, right)
+              SSAExpr::BinaryOp(*op, out, left, right)
             }
           }
         }
-        OpExpr::UnaryOp(op, out, left) => {
+        SSAExpr::UnaryOp(op, out, left) => {
           let left = convert_ssa_to_reg(left, &mut register);
           let out = convert_ssa_to_reg(out, &mut register);
-          OpExpr::UnaryOp(*op, out, left)
+          SSAExpr::UnaryOp(*op, out, left)
         }
 
-        OpExpr::NullOp(op, out) => {
+        SSAExpr::NullOp(op, out) => {
           let out = convert_ssa_to_reg(out, &mut register);
-          OpExpr::NullOp(*op, out)
+          SSAExpr::NullOp(*op, out)
         }
       };
 
@@ -254,12 +234,14 @@ pub fn compile_from_ssa_fn(funct: &LL_SSA_function<()>) {
   todo!("Compile function")
 }
 
-impl OpVal<GeneralRegisterName> {
+impl OpArg<GeneralRegisterName> {
   pub fn to_reg_arg(&self) -> Arg {
     use Arg::*;
     match self {
-      Self::Lit(literal) => match literal {
-        LLVal::Int(IntData { val: IntVal::Static(val), bits, signed }) => Imm(*val as u64),
+      Self::Lit(literal) => match literal.info.ty() {
+        LLType::Float => Imm(from_flt(*literal) as u64),
+        LLType::Integer => Imm(from_int(*literal) as u64),
+        LLType::Unsigned => Imm(from_uint(*literal) as u64),
         _ => unreachable!(),
       },
       Self::REG(reg, l_val) => Reg(*reg),
@@ -270,12 +252,13 @@ impl OpVal<GeneralRegisterName> {
   pub fn to_mem_arg(&self) -> Arg {
     use Arg::*;
     match self {
-      Self::Lit(literal) => match literal {
-        LLVal::Int(IntData { val: IntVal::Static(val), bits, signed }) => Imm(*val as u64),
+      Self::Lit(literal) => match literal.info.ty() {
+        LLType::Float => Imm(from_flt(*literal) as u64),
+        LLType::Integer => Imm(from_int(*literal) as u64),
+        LLType::Unsigned => Imm(from_uint(*literal) as u64),
         _ => unreachable!(),
       },
       Self::REG(reg, l_val) => match l_val {
-        LLVal::Ptr(..) => Mem(*reg),
         _ => Reg(*reg),
       },
       _ => unreachable!(),
@@ -292,8 +275,8 @@ fn push_bytes<T: Sized>(mut binary: &mut Vec<u8>, data: T) {
 }
 
 pub fn compile_op(
-  op: &OpExpr<GeneralRegisterName>,
-  block: &ExeBlock<()>,
+  op: &SSAExpr<GeneralRegisterName>,
+  block: &SSABlock<()>,
   binary: &mut Vec<u8>,
   jmp_resolver: &mut JumpResolution,
 ) {
@@ -301,20 +284,20 @@ pub fn compile_op(
   use BitSize::*;
   use GeneralRegisterName as GR;
   match op.name() {
-    Op::ADD => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::ADD => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
         }
 
-        add(binary, left_val.ll_val().bit_size(), right_val.to_reg_arg(), left_val.to_reg_arg());
+        add(binary, left_val.ll_val().info.into(), right_val.to_reg_arg(), left_val.to_reg_arg());
         println!("ADD {dest:?}, {right_val:?}");
         println!("")
       }
     }
-    Op::SUB => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::SUB => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
@@ -323,8 +306,8 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::MUL => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::MUL => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
@@ -333,8 +316,8 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::DIV => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::DIV => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
@@ -343,8 +326,8 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::LOG => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::LOG => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
@@ -353,8 +336,8 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::POW => {
-      if let OpExpr::BinaryOp(_, dest, left_val, right_val) = op {
+    SSAOp::POW => {
+      if let SSAExpr::BinaryOp(_, dest, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
         if dest.ll_val() != left_val.ll_val() {
           println!("need to convert, {left_val:?} to {dest:?}")
@@ -363,15 +346,15 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::GR => todo!("Op::GR"),
-    Op::LE => todo!("Op::LE"),
-    Op::GE => {
-      if let OpExpr::BinaryOp(_, _, left_val, right_val) = op {
+    SSAOp::GR => todo!("SSAOp::GR"),
+    SSAOp::LE => todo!("SSAOp::LE"),
+    SSAOp::GE => {
+      if let SSAExpr::BinaryOp(_, _, left_val, right_val) = op {
         // Requires RAX to be set to int_val;
 
         if let (Some(pass), Some(fail)) = (block.branch_succeed, block.branch_fail) {
           println!("CMP {left_val:?} {right_val:?}");
-          cmp(binary, left_val.ll_val().bit_size(), left_val.to_reg_arg(), right_val.to_reg_arg());
+          cmp(binary, left_val.ll_val().info.into(), left_val.to_reg_arg(), right_val.to_reg_arg());
 
           if pass == block.id + 1 {
             jmp(binary, b32, JumpOps::Less, Imm(fail as u64));
@@ -394,50 +377,42 @@ pub fn compile_op(
         }
       }
     }
-    Op::LS => todo!("Op::LS"),
-    Op::OR => todo!("Op::OR"),
-    Op::XOR => todo!("Op::XOR"),
-    Op::AND => todo!("Op::AND"),
-    Op::NOT => todo!("Op::NOT"),
-    Op::LOAD => {
-      if let OpExpr::UnaryOp(_, dest_reg, source_reg) = op {
+    SSAOp::LS => todo!("SSAOp::LS"),
+    SSAOp::OR => todo!("SSAOp::OR"),
+    SSAOp::XOR => todo!("SSAOp::XOR"),
+    SSAOp::AND => todo!("SSAOp::AND"),
+    SSAOp::NOT => todo!("SSAOp::NOT"),
+    SSAOp::LOAD => {
+      if let SSAExpr::UnaryOp(_, dest_reg, source_reg) = op {
         // Requires RAX to be set to int_val;
 
-        match source_reg.ll_val() {
-          LLVal::Ptr(PtrData { ptr: PtrType::Stack(index), bits, elements }) => {
-            let bit_size = source_reg.ll_val().bit_size();
-            println!("MOV {dest_reg:?} [{source_reg:?}] {bit_size:?}");
-            mov(binary, bit_size, source_reg.to_mem_arg(), dest_reg.to_reg_arg())
-          }
-          LLVal::Ptr(PtrData { ptr: PtrType::Heap, bits, elements }) => {}
-          ty => panic!("invalid type for load op: {ty:?}"),
-        }
+        println!("MOV {dest_reg:?} [{source_reg:?}]",);
 
         println!("")
       }
     }
-    Op::STORE => {
-      if let OpExpr::BinaryOp(_, _, ptr_val, int_val) = op {
+    SSAOp::STORE => {
+      if let SSAExpr::BinaryOp(_, _, ptr_val, int_val) = op {
         // Requires RAX to be set to int_val;
 
-        if let OpVal::REG(ptr_name, _) = ptr_val {
+        if let OpArg::REG(ptr_name, _) = ptr_val {
           match int_val {
-            OpVal::REG(int_name, _) => {
+            OpArg::REG(int_name, _) => {
               println!("MOV {ptr_name:?} {int_name:?}");
             }
-            OpVal::Lit(val) => {
-              match val {
-                LLVal::F32(val) => {
-                  let imm = Imm(unsafe { std::mem::transmute::<_, u32>(*val) } as u64);
-                  mov(binary, b32, imm, Mem(*ptr_name));
+            OpArg::Lit(val) => {
+              match val.info.ty() {
+                LLType::Float => {
+                  mov(binary, val.info.into(), Imm(from_flt(*val) as u64), Mem(*ptr_name));
+                  println!("MOV [ {ptr_name:?}] {val:?}");
                 }
-                LLVal::F64(val) => {
-                  let imm = Imm(unsafe { std::mem::transmute(*val) });
-                  mov(binary, b64, imm, Mem(*ptr_name));
+                LLType::Unsigned => {
+                  mov(binary, val.info.into(), Imm(from_uint(*val) as u64), Mem(*ptr_name));
+                  println!("MOV [ {ptr_name:?}] {val:?}");
                 }
-                LLVal::Int(IntData { val: IntVal::Static(imm), .. }) => {
-                  mov(binary, val.bit_size(), Imm(*imm as u64), Mem(*ptr_name));
-                  println!("MOV [ {ptr_name:?}] {imm}");
+                LLType::Integer => {
+                  mov(binary, val.info.into(), Imm(from_int(*val) as u64), Mem(*ptr_name));
+                  println!("MOV [ {ptr_name:?}] {val:?}");
                 }
                 _ => unreachable!(),
               };
@@ -450,26 +425,26 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::CALL => todo!("Op::CALL"),
-    Op::CONVERT => todo!("Op::CONVERT"),
-    Op::ALLOC => {
-      if let OpExpr::BinaryOp(_, ptr_val, _, int_val) = op {
+    SSAOp::CALL => todo!("SSAOp::CALL"),
+    SSAOp::CONVERT => todo!("SSAOp::CONVERT"),
+    SSAOp::ALLOC => {
+      if let SSAExpr::BinaryOp(_, ptr_val, _, int_val) = op {
         // Requires RAX to be set to int_val;
 
-        if let OpVal::REG(ptr_name, _) = ptr_val {
+        if let OpArg::REG(ptr_name, _) = ptr_val {
           match int_val {
-            OpVal::REG(int_name, _) => {
+            OpArg::REG(int_name, _) => {
               mov(binary, b64, Reg(*int_name), Reg(GR::RDI));
               mov(binary, b64, Reg(GR::RAX), Reg(*ptr_name));
               println!("MOV RDI {int_name:?}");
               println!("CALL %malloc%");
               println!("MOV {ptr_name:?} RAX");
             }
-            OpVal::Lit(val) => {
-              let imm = match val {
-                LLVal::F32(val) => *val as i64,
-                LLVal::F64(val) => *val as i64,
-                LLVal::Int(IntData { val: IntVal::Static(val), .. }) => *val,
+            OpArg::Lit(val) => {
+              let imm = match val.info.ty() {
+                LLType::Float => from_flt(*val) as i64,
+                LLType::Integer => from_int(*val) as i64,
+                LLType::Unsigned => from_uint(*val) as i64,
                 _ => unreachable!(),
               } as u64;
 
@@ -491,11 +466,11 @@ pub fn compile_op(
         println!("")
       }
     }
-    Op::RETURN => todo!("Op::RETURN"),
-    Op::CALL_BLOCK => todo!("Op::CALL_BLOCK"),
-    Op::EXIT_BLOCK => todo!("Op::EXIT_BLOCK"),
-    Op::JUMP => {
-      if let OpExpr::UnaryOp(..) = op {
+    SSAOp::RETURN => todo!("SSAOp::RETURN"),
+    SSAOp::CALL_BLOCK => todo!("SSAOp::CALL_BLOCK"),
+    SSAOp::EXIT_BLOCK => todo!("SSAOp::EXIT_BLOCK"),
+    SSAOp::JUMP => {
+      if let SSAExpr::UnaryOp(..) = op {
         // Requires RAX to be set to int_val;
         if let Some(target_id) = block.branch_unconditional {
           jmp(binary, b32, JumpOps::Jump, Imm(target_id as u64));
@@ -504,9 +479,9 @@ pub fn compile_op(
         }
       }
     }
-    Op::JUMP_ZE => todo!("Op::JUMP_ZE"),
-    Op::JUMP_NZ => todo!("Op::JUMP_NZ"),
-    Op::JUMP_EQ => todo!("Op::JUMP_EQ"),
+    SSAOp::JUMP_ZE => todo!("SSAOp::JUMP_ZE"),
+    SSAOp::JUMP_NZ => todo!("SSAOp::JUMP_NZ"),
+    SSAOp::JUMP_EQ => todo!("SSAOp::JUMP_EQ"),
   }
 }
 
@@ -897,35 +872,24 @@ pub fn encode_binary_op(
 }
 
 fn convert_ssa_to_reg(
-  op: &OpVal<()>,
+  op: &OpArg<()>,
   register: &mut RegisterAllocator,
-) -> OpVal<GeneralRegisterName> {
+) -> OpArg<GeneralRegisterName> {
   match *op {
-    OpVal::SSA(index, val) => {
-      if let LLVal::Und = val {
-        return OpVal::SSA(index, val);
+    OpArg::SSA(index, val) => {
+      if val.info.is_undefined() {
+        return OpArg::SSA(index, val);
       }
-      match val {
-        LLVal::Und => OpVal::REG(register.set(BitSize::b64, val), val),
-        LLVal::Ptr(_) => OpVal::REG(register.set(BitSize::b64, val), val),
-        LLVal::PtrBits(_) => OpVal::REG(register.set(BitSize::b64, val), val),
-        LLVal::F32(_) => OpVal::REG(register.set(BitSize::b64, val), val),
-        LLVal::F64(_) => OpVal::REG(register.set(BitSize::b64, val), val),
-        LLVal::Int(int) => match int.bits {
-          BitSize::b8 => OpVal::REG(register.set(BitSize::b64, val), val),
-          BitSize::b16 => OpVal::REG(register.set(BitSize::b64, val), val),
-          BitSize::b32 => OpVal::REG(register.set(BitSize::b64, val), val),
-          BitSize::b64 => OpVal::REG(register.set(BitSize::b64, val), val),
-          _ => OpVal::REG(GeneralRegisterName::R8, val),
-        },
-      }
+
+      OpArg::REG(register.set(val.info.into(), val), val)
     }
-    OpVal::BLOCK(block) => OpVal::BLOCK(block),
-    OpVal::Lit(literal) => OpVal::Lit(literal),
-    OpVal::REF(reference) => {
-      OpVal::REG(register.set(BitSize::b64, LLVal::Ptr(reference)), LLVal::Ptr(reference))
+    OpArg::SSA_DECL(_, _, reference) => {
+      OpArg::REG(register.set(BitSize::b64, reference), reference)
     }
-    _ => unreachable!(),
+    OpArg::BLOCK(block) => OpArg::BLOCK(block),
+    OpArg::Lit(literal) => OpArg::Lit(literal),
+    OpArg::Undefined => OpArg::Undefined,
+    OpArg::REG(..) => unreachable!(),
   }
 }
 

@@ -163,7 +163,7 @@ IMPORT expression as expr
 
   > prim::sci_num
 
-    :ast { t_LL_Num, val:f64($1) }
+    :ast { t_LL_Num, val:f64($1), tok }
 
 
 <> primitive_unsigned_integer 

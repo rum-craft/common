@@ -30,6 +30,8 @@ imports_layout = "HorizontalVertical"
 
 overflow_delimited_expr = true
 
-reorder_impl_items = true
+reorder_impl_items = false
 
 struct_lit_width = 70
+
+
