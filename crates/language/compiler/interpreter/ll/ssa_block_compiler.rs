@@ -82,16 +82,22 @@ pub fn compile_function_blocks(funct: &LL_function<Token>) -> RumResult<SSAFunct
   };
 
   match &funct.block.ret.expression {
-    arithmetic_Value::None => {}
+    arithmetic_Value::None => {
+      active_block.null_op(SSAOp::RETURN, Default::default());
+    }
     expr => {
       let ty = ty_to_ll_value(&funct.return_type)?;
-      let val = Some(process_arithmetic_expression(&expr, active_block, ty.info)?);
-      ctx.get_head_block().return_val = val;
+      let val = process_arithmetic_expression(&expr, active_block, ty.info)?;
+
+      active_block.null_op(SSAOp::RETURN, Default::default());
+
+      active_block.return_val = Some(val);
     }
   }
 
   Ok(SSAFunction {
-    blocks: ctx.blocks.into_iter().map(|b| unsafe { Box::from_raw(b) }).collect(),
+    blocks:       ctx.blocks.into_iter().map(|b| unsafe { Box::from_raw(b) }).collect(),
+    declarations: ctx.stack_ids as usize,
   })
 }
 
@@ -124,8 +130,9 @@ fn process_statements<'a>(
   loop_block_id: usize,
 ) -> RumResult<&'a mut SSABlock<()>> {
   use SSAOp::*;
+
   match statement {
-    block_list_Value::LL_Continue(_) => {
+    block_list_Value::LL_Continue(t) => {
       block.branch_unconditional = Some(loop_block_id);
       block.unary_op(SSAOp::JUMP, Default::default(), OpArg::BLOCK(loop_block_id));
       block.ctx().get_block_mut(loop_block_id).unwrap().predecessors.insert(block.id);
@@ -133,17 +140,21 @@ fn process_statements<'a>(
     }
     /// Binds a variable to a type.
     block_list_Value::LL_Var_Binding(binding) => {
+      block.debug_op(binding.tok.clone());
       process_binding(binding, block)?;
     }
     block_list_Value::LL_Assign(assign) => {
+      block.debug_op(assign.tok.clone());
       process_assignment(block, assign)?;
     }
     block_list_Value::LL_HeapAllocate(alloc) => {
+      block.debug_op(alloc.tok.clone());
       let target = &alloc.id;
       let target_name = target.id.to_token();
       create_allocation(block, target_name, true, &alloc.byte_count);
     }
     block_list_Value::LL_StackAllocate(alloc) => {
+      block.debug_op(alloc.tok.clone());
       let target = &alloc.id;
       let target_name = target.id.to_token();
       create_allocation(block, target_name, false, &alloc.byte_count);
@@ -156,7 +167,7 @@ fn process_statements<'a>(
     }
     block_list_Value::LL_Match(m) => {
       match process_match_expression(&m.expression, block, Default::default())? {
-        LogicalExprType::Arithmatic(arithmatic_OpArg, _) => {
+        LogicalExprType::Arithmatic(op_arg, _) => {
           todo!("Arithmetic based matching")
         }
         LogicalExprType::Boolean(bool_block) => {
@@ -239,9 +250,9 @@ fn process_assignment(block: &mut SSABlock<()>, assign: &LL_Assign<Token>) -> Ru
   match &assign.location {
     Id(id) => {
       let name = id.id.intern();
+      block.debug_op(id.tok.clone());
 
       if let Some((decl)) = block.get_id_cloned(name, true) {
-        dbg!(decl, decl.ty.derefed().info.ty());
         let value =
           process_arithmetic_expression(&assign.expression, block, decl.ty.derefed().info)?;
         block.push_binary_op(SSAOp::STORE, Default::default(), decl.into(), value);
@@ -268,8 +279,9 @@ fn process_assignment(block: &mut SSABlock<()>, assign: &LL_Assign<Token>) -> Ru
     assignment_Value::LL_MemLocation(location) => {
       let base_ptr = resolve_base_ptr(&location.base_ptr, block);
       let offset = resolve_mem_offset(&location.expression, block);
+      block.debug_op(location.tok.clone());
 
-      if let ref_val @ OpArg::SSA_DECL(_, _, ty) = base_ptr {
+      if let ref_val @ OpArg::STACK(_, ty) = base_ptr {
         let expression =
           process_arithmetic_expression(&assign.expression, block, TI::Integer | TI::b64)?;
 
@@ -329,8 +341,9 @@ fn resolve_base_ptr(
 fn resolve_mem_offset(expr: &mem_expr_Value<Token>, block: &mut SSABlock<()>) -> OpArg<()> {
   match expr {
     mem_expr_Value::Id(id) => {
+      block.debug_op(id.tok.clone());
       if let Some(ptr) = block.get_id_cloned(id.id.to_token(), true) {
-        block.unary_op(SSAOp::LOAD, ptr.ty.derefed(), ptr.into())
+        block.unary_op(SSAOp::LOAD, ptr.ty.derefed().unstacked(), ptr.into())
       } else {
         panic!()
       }
@@ -339,6 +352,7 @@ fn resolve_mem_offset(expr: &mem_expr_Value<Token>, block: &mut SSABlock<()>) ->
       OpArg::Lit(LLVal::new(TI::Integer | TI::b64).store::<u64>(int.val as u64))
     }
     mem_expr_Value::LL_MemAdd(add) => {
+      block.debug_op(add.tok.clone());
       let left = resolve_mem_offset(&add.left, block);
       let right = resolve_mem_offset(&add.right, block);
       let right = convert_val(right, left.ll_val().info, block);
@@ -366,6 +380,7 @@ fn resolve_mem_offset(expr: &mem_expr_Value<Token>, block: &mut SSABlock<()>) ->
       }
     }
     mem_expr_Value::LL_MemMul(mul) => {
+      block.debug_op(mul.tok.clone());
       let left = resolve_mem_offset(&mul.left, block);
       let right = resolve_mem_offset(&mul.right, block);
       let right = convert_val(right, left.ll_val().info, block);
@@ -409,7 +424,7 @@ impl<'a> LogicalExprType<'a> {
   ) -> RumResult<Self> {
     match result {
       Err(err) => Err(err),
-      Ok(OpArg) => Ok(Self::Arithmatic(OpArg, block)),
+      Ok(op_arg) => Ok(Self::Arithmatic(op_arg, block)),
     }
   }
 }
@@ -497,6 +512,7 @@ fn handle_primitive_cast(
   val: &compiler::parser::LL_PrimitiveCast<Token>,
   block: &mut SSABlock<()>,
 ) -> RumResult<OpArg<()>> {
+  block.debug_op(val.tok.clone());
   let ty = val.ty.clone().into();
   let ty: LLVal = ty_to_ll_value(&ty)?;
 
@@ -508,6 +524,7 @@ fn handle_sub(
   block: &mut SSABlock<()>,
   e_val: TypeInfo,
 ) -> RumResult<OpArg<()>> {
+  block.debug_op(sub.tok.clone());
   let left = process_arithmetic_expression(&sub.left, block, e_val)?;
 
   let right = convert_val(
@@ -540,14 +557,15 @@ fn handle_sub(
 }
 
 fn handle_add(
-  sub: &compiler::parser::Add<Token>,
+  add: &compiler::parser::Add<Token>,
   block: &mut SSABlock<()>,
   e_val: TypeInfo,
 ) -> RumResult<OpArg<()>> {
-  let left = process_arithmetic_expression(&sub.left, block, e_val)?;
+  block.debug_op(add.tok.clone());
+  let left = process_arithmetic_expression(&add.left, block, e_val)?;
 
   let right = convert_val(
-    process_arithmetic_expression(&sub.right, block, e_val)?,
+    process_arithmetic_expression(&add.right, block, e_val)?,
     left.ll_val().info,
     block,
   );
@@ -576,14 +594,15 @@ fn handle_add(
 }
 
 fn handle_div(
-  sub: &compiler::parser::Div<Token>,
+  div: &compiler::parser::Div<Token>,
   block: &mut SSABlock<()>,
   e_val: TypeInfo,
 ) -> RumResult<OpArg<()>> {
-  let left = process_arithmetic_expression(&sub.left, block, e_val)?;
+  block.debug_op(div.tok.clone());
+  let left = process_arithmetic_expression(&div.left, block, e_val)?;
 
   let right = convert_val(
-    process_arithmetic_expression(&sub.right, block, e_val)?,
+    process_arithmetic_expression(&div.right, block, e_val)?,
     left.ll_val().info,
     block,
   );
@@ -612,14 +631,15 @@ fn handle_div(
 }
 
 fn handle_mul(
-  sub: &compiler::parser::Mul<Token>,
+  mul: &compiler::parser::Mul<Token>,
   block: &mut SSABlock<()>,
   e_val: TypeInfo,
 ) -> RumResult<OpArg<()>> {
-  let left = process_arithmetic_expression(&sub.left, block, e_val)?;
+  block.debug_op(mul.tok.clone());
+  let left = process_arithmetic_expression(&mul.left, block, e_val)?;
 
   let right = convert_val(
-    process_arithmetic_expression(&sub.right, block, e_val)?,
+    process_arithmetic_expression(&mul.right, block, e_val)?,
     left.ll_val().info,
     block,
   );
@@ -652,6 +672,7 @@ fn handle_ge<'a>(
   block: &'a mut SSABlock<()>,
   e_val: TypeInfo,
 ) -> RumResult<LogicalExprType<'a>> {
+  block.debug_op(val.tok.clone());
   let left = process_arithmetic_expression(&val.left, block, e_val)?;
   let right = convert_val(
     process_arithmetic_expression(&val.right, block, e_val)?,
@@ -872,7 +893,7 @@ fn handle_member(
 ) -> RumResult<OpArg<()>> {
   todo_note!("Handle Member Expression - Multi Level Case");
   match block.get_id_cloned(val.root.id.to_token(), true) {
-    Some(decl) => Ok(block.unary_op(SSAOp::LOAD, decl.ty, decl.into())),
+    Some(decl) => Ok(block.unary_op(SSAOp::LOAD, decl.ty.unstacked(), decl.into())),
     None => {
       panic!(
         "Undeclared variable {block:#?}[{}]:\n{}",
@@ -891,7 +912,7 @@ fn create_allocation(
 ) {
   match block.get_id_mut(target_name, false) {
     Some((mut decl, tok)) => {
-      if decl.ptr_loc != DataLocation::Unallocated {
+      if decl.ty.info.location() != DataLocation::Undefined {
         panic!("Already allocated! {}", tok.blame(1, 1, "", None))
       }
 
@@ -899,9 +920,9 @@ fn create_allocation(
         panic!("Variable is not bound to a ptr type! {}", tok.blame(1, 1, "", None))
       }
       if is_heap {
-        decl.ptr_loc = DataLocation::Heap;
+        decl.ty.info |= TI::to_location(DataLocation::Heap);
       } else {
-        decl.ptr_loc = DataLocation::SsaStack(decl.data_loc);
+        decl.ty.info |= TI::to_location(DataLocation::SsaStack(decl.ty.info.stack_id().unwrap()));
       }
 
       match byte_count {
@@ -930,7 +951,9 @@ fn create_allocation(
             let ptr_id = *ptr_id;
 
             if is_heap {
-              let op_val = block.unary_op(SSAOp::LOAD, ptr_id.ty.derefed(), ptr_id.into());
+              block.debug_op(id.tok.clone());
+              let op_val =
+                block.unary_op(SSAOp::LOAD, ptr_id.ty.derefed().unstacked(), ptr_id.into());
               block.push_binary_op(SSAOp::ALLOC, Default::default(), decl.into(), op_val);
             }
           } else {
